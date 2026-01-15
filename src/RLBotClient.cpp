@@ -1,108 +1,92 @@
 #include "RLBotClient.h"
 
 using namespace RLGC;
-using namespace GGL;
 
-static std::shared_ptr<const SharedBotContext> gCtx;
-
-void InitBotContext(std::shared_ptr<SharedBotContext> ctx)
+namespace
 {
-    if (!ctx || !ctx->obs || !ctx->act || !ctx->inferUnit) {
-        throw std::runtime_error("InitBotContext: ctx/obs/act/infer must be non-null");
+    Vec ToVec(const rlbot::flat::Vector3 rlbotVec) {
+        return Vec(rlbotVec.x(), rlbotVec.y(), rlbotVec.z());
     }
-    gCtx = std::move(ctx);
-}
 
-std::shared_ptr<const SharedBotContext> GetBotContext()
-{
-    if (!gCtx) {
-        throw std::runtime_error("GetBotContext: InitBotContext was not called");
+    PhysState ToPhysObj(const rlbot::flat::Physics* phys) {
+        PhysState obj = {};
+        obj.pos = ToVec(phys->location());
+
+        Angle ang = Angle(phys->rotation().yaw(), phys->rotation().pitch(), phys->rotation().roll());
+        obj.rotMat = ang.ToRotMat();
+
+        obj.vel = ToVec(phys->velocity());
+        obj.angVel = ToVec(phys->angular_velocity());
+
+        return obj;
     }
-    return gCtx;
-}
 
-RLBotBot::RLBotBot(std::unordered_set<unsigned> indices_, unsigned const team_, std::string name_) noexcept
+    Player ToPlayer(const rlbot::flat::PlayerInfo* playerInfo) {
+        Player pd = {};
+
+        static_cast<PhysState&>(pd) = ToPhysObj(playerInfo->physics());
+
+        pd.carId = playerInfo->player_id();
+        pd.team = (Team)playerInfo->team();
+
+        pd.boost = playerInfo->boost();
+        pd.isOnGround = playerInfo->air_state() == rlbot::flat::AirState::OnGround;
+        pd.hasJumped = playerInfo->has_jumped();
+        pd.hasDoubleJumped = playerInfo->has_double_jumped();
+        pd.isDemoed = playerInfo->demolished_timeout() >= 0;
+
+        return pd;
+    }
+
+    GameState ToGameState(rlbot::flat::GamePacket const* packet) {
+        GameState gs = {};
+
+        auto players = packet->players();
+        for (int i = 0; i < players->size(); i++)
+            gs.players.push_back(ToPlayer(players->Get(i)));
+
+        static_cast<PhysState&>(gs.ball) = ToPhysObj(packet->balls()->Get(0)->physics());
+
+        auto boostPadStates = packet->boost_pads();
+        if (boostPadStates->size() != CommonValues::BOOST_LOCATIONS_AMOUNT) {
+            if (rand() % 20 == 0) { // Don't spam-log as that will lag the bot
+                RG_LOG(
+                    "RLBotClient ToGameState(): Bad boost pad amount, expected "
+                    << CommonValues::BOOST_LOCATIONS_AMOUNT << " but got " << boostPadStates->size()
+                );
+            }
+
+            // Just set all boost pads to on
+            std::fill(gs.boostPads.begin(), gs.boostPads.end(), 1);
+        }
+        else {
+            for (int i = 0; i < CommonValues::BOOST_LOCATIONS_AMOUNT; i++) {
+                gs.boostPads[i] = boostPadStates->Get(i)->is_active();
+                gs.boostPadsInv[CommonValues::BOOST_LOCATIONS_AMOUNT - i - 1] = gs.boostPads[i];
+            }
+        }
+
+        return gs;
+    }
+} // anonymous namespace
+
+RLBotBot::RLBotBot(std::unordered_set<unsigned> indices_,
+    unsigned const team_,
+    std::string name_,
+    std::shared_ptr<const SharedBotContext> ctx) noexcept
     : rlbot::Bot(std::move(indices_), team_, std::move(name_))
+    , ctx_(std::move(ctx))
 {
-    ctx_ = GetBotContext();
-
     std::set<unsigned> sorted(std::begin(indices), std::end(indices));
     for (auto const& index : sorted)
         std::printf("Team %u Index %u: %s created\n", team_, index, name_.c_str());
 }
 
-RLBotBot::~RLBotBot()
-{
-}
-
-Vec ToVec(const rlbot::flat::Vector3 rlbotVec) {
-    return Vec(rlbotVec.x(), rlbotVec.y(), rlbotVec.z());
-}
-
-PhysState ToPhysObj(const rlbot::flat::Physics* phys) {
-    PhysState obj = {};
-    obj.pos = ToVec(phys->location());
-
-    Angle ang = Angle(phys->rotation().yaw(), phys->rotation().pitch(), phys->rotation().roll());
-    obj.rotMat = ang.ToRotMat();
-
-    obj.vel = ToVec(phys->velocity());
-    obj.angVel = ToVec(phys->angular_velocity());
-
-    return obj;
-}
-
-Player ToPlayer(const rlbot::flat::PlayerInfo* playerInfo) {
-    Player pd = {};
-
-    static_cast<PhysState&>(pd) = ToPhysObj(playerInfo->physics());
-
-    pd.carId = playerInfo->player_id();
-
-    pd.team = (Team)playerInfo->team();
-
-    pd.boost = playerInfo->boost();
-    pd.isOnGround = playerInfo->air_state() == rlbot::flat::AirState::OnGround;
-    pd.hasJumped = playerInfo->has_jumped();
-    pd.hasDoubleJumped = playerInfo->has_double_jumped();
-    pd.isDemoed = playerInfo->demolished_timeout() >= 0;
-
-    return pd;
-}
-
-GameState ToGameState(rlbot::flat::GamePacket const* packet) {
-    GameState gs = {};
-
-    auto players = packet->players();
-    for (int i = 0; i < players->size(); i++)
-        gs.players.push_back(ToPlayer(players->Get(i)));
-
-
-    static_cast<PhysState&>(gs.ball) = ToPhysObj(packet->balls()->Get(0)->physics());
-
-    auto boostPadStates = packet->boost_pads();
-    if (boostPadStates->size() != CommonValues::BOOST_LOCATIONS_AMOUNT) {
-        if (rand() % 20 == 0) { // Don't spam-log as that will lag the bot
-            RG_LOG(
-                "RLBotClient ToGameState(): Bad boost pad amount, expected " << CommonValues::BOOST_LOCATIONS_AMOUNT << " but got " << boostPadStates->size()
-            );
-        }
-
-        // Just set all boost pads to on
-        std::fill(gs.boostPads.begin(), gs.boostPads.end(), 1);
-    }
-    else {
-        for (int i = 0; i < CommonValues::BOOST_LOCATIONS_AMOUNT; i++) {
-            gs.boostPads[i] = boostPadStates->Get(i)->is_active();
-            gs.boostPadsInv[CommonValues::BOOST_LOCATIONS_AMOUNT - i - 1] = gs.boostPads[i];
-        }
-    }
-
-    return gs;
-}
+RLBotBot::~RLBotBot() {}
 
 void RLBotBot::update(rlbot::flat::GamePacket const* packet,
-    rlbot::flat::BallPrediction const* ballPrediction_) noexcept {
+    rlbot::flat::BallPrediction const* ballPrediction_) noexcept
+{
     if (!packet || !packet->match_info() || !packet->balls()) {
         for (auto const& index : this->indices) setOutput(index, {});
         return;
@@ -167,8 +151,7 @@ void RLBotBot::update(rlbot::flat::GamePacket const* packet,
 
         // Advance by dtFrames ticks
         // If dtFrames > 1, we don't have intermediate obs, so keep the same planned action for those missing ticks.
-        for (uint32_t k = 0; k < dtFrames; ++k)
-        {
+        for (uint32_t k = 0; k < dtFrames; ++k) {
             // At the start of each macro-step, compute a new planned action once
             if (st.tickInStep == 0) {
                 auto& localPlayer = gs.players[index];

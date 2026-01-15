@@ -19,12 +19,9 @@ struct SharedBotContext {
     RLBotParams params;
 };
 
-void InitBotContext(std::shared_ptr<SharedBotContext> ctx);
-std::shared_ptr<const SharedBotContext> GetBotContext();
-
 class RLBotBot : public rlbot::Bot {
 public:
-	// Used so that the for loop in update() can actually handle multiple indices correctly
+    // Used so that the for loop in update() can actually handle multiple indices correctly
     struct PerBotState {
         bool initialized = false;
 
@@ -50,7 +47,11 @@ public:
 
     RLBotBot() noexcept = delete;
     ~RLBotBot() noexcept override;
-    RLBotBot(std::unordered_set<unsigned> indices_, unsigned team_, std::string name_) noexcept;
+
+    RLBotBot(std::unordered_set<unsigned> indices_,
+        unsigned team_,
+        std::string name_,
+        std::shared_ptr<const SharedBotContext> ctx_) noexcept;
 
     RLBotBot(RLBotBot const&) noexcept = delete;
     RLBotBot(RLBotBot&&) noexcept = delete;
