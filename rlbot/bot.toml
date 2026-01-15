@@ -10,6 +10,8 @@ loadout_file = "loadout.toml"
 # Start your bot with run.bat so it can set the path to libtorch
 # You may get errors trying to run the .exe directly
 run_command = "cmd /C run.bat"
+# The command RLBot will call to start your bot on linux
+run_command_linux = "bash -lc ./run.sh"
 # This is the path to your bot's logo image,
 # which will be displayed in the GUI
 # The example bot does not have a logo
