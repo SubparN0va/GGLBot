@@ -111,7 +111,7 @@ namespace
 } // anonymous namespace
 
 
-int main(char** argv)
+int main(int argc, char** argv)
 {
     auto ctx = std::make_shared<SharedBotContext>();
 
