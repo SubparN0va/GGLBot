@@ -3,7 +3,6 @@
 namespace RLGC {
 	void Player::ResetBeforeStep() {
 		this->eventState = {};
-		debugRewardsWeighted.clear();
 	}
 
 	void Player::UpdateFromCar(Car* car, uint64_t tickCount, int tickSkip, const Action& prevAction, Player* prev) {
@@ -19,7 +18,8 @@ namespace RLGC {
 		if (ballHitInfo.isValid) {
 			ballTouchedStep = ballHitInfo.tickCountWhenHit >= (tickCount - tickSkip);
 			ballTouchedTick = ballHitInfo.tickCountWhenHit == (tickCount - 1);
-		} else {
+		}
+		else {
 			ballTouchedStep = ballTouchedTick = false;
 		}
 

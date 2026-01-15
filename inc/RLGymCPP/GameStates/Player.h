@@ -1,7 +1,6 @@
 #pragma once
 #include "../Framework.h"
 #include "../BasicTypes/Action.h"
-#include <unordered_map>
 
 namespace RLGC {
 	struct PlayerEventState {
@@ -27,8 +26,6 @@ namespace RLGC {
 		bool ballTouchedTick; // True if the player is touching the ball on the final tick of the step
 
 		Action prevAction = {};
-
-		std::unordered_map<std::string, float> debugRewardsWeighted;
 
 		// Called before updating to reset the per-step state
 		void ResetBeforeStep();

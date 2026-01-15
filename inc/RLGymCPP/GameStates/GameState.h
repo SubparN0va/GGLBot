@@ -18,7 +18,7 @@ namespace RLGC {
 
 	// https://github.com/AechPro/rocket-league-gym-sim/blob/main/rlgym_sim/utils/gamestates/game_state.py
 	struct GameState {
-		
+
 		GameState* prev = NULL;
 
 		float deltaTime = 0; // Time that has passed since last update
@@ -40,9 +40,6 @@ namespace RLGC {
 		// Last tick count when updated
 		uint64_t lastTickCount = 0;
 
-		uint64_t episodeId = 0;
-		uint32_t episodeStep = 0;
-
 		void* userInfo = NULL;
 
 		GameState() {
@@ -52,10 +49,7 @@ namespace RLGC {
 			boostPadTimersInv = std::vector<float>(CommonValues::BOOST_LOCATIONS_AMOUNT, 0);
 		}
 		explicit GameState(Arena* arena) {
-			std::vector<Car*> cars;
-			arena->GetCarsOrdered(cars);
-
-			UpdateFromArena(arena, std::vector<Action>(cars.size()), NULL);
+			UpdateFromArena(arena, std::vector<Action>(arena->_cars.size()), NULL);
 		}
 
 		const auto& GetBoostPads(bool inverted) const {

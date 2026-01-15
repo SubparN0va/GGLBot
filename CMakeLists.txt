@@ -2,8 +2,6 @@ cmake_minimum_required(VERSION 3.22)
 
 project(GGLBot)
 
-set(CMAKE_CXX_STANDARD 20) 
-
 add_subdirectory(cpp-interface EXCLUDE_FROM_ALL)
 
 # ---- GGLBot (EXE) ----
@@ -24,6 +22,8 @@ add_executable(GGLBot
   ${GGLBOT_SOURCES} 
   ${GGLBOT_HEADERS}
 ) 
+
+target_compile_features(GGLBot PRIVATE cxx_std_20)
 
 target_include_directories(GGLBot PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}"      

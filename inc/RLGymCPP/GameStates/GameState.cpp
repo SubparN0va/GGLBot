@@ -1,6 +1,6 @@
 #include "GameState.h"
 
-#include "RocketSim/Math/Math.h"
+#include "RocketSim/src/Math/Math.h"
 
 using namespace RLGC;
 
@@ -19,7 +19,7 @@ void _BuildBoostPadIndexMap(Arena* arena) {
 			"(" << arena->_boostPads.size() << "/" << CommonValues::BOOST_LOCATIONS_AMOUNT << ")"
 		);
 	}
-	
+
 	bool found[CommonValues::BOOST_LOCATIONS_AMOUNT] = {};
 	for (int i = 0; i < CommonValues::BOOST_LOCATIONS_AMOUNT; i++) {
 		Vec targetPos = CommonValues::BOOST_LOCATIONS[i];
@@ -30,7 +30,8 @@ void _BuildBoostPadIndexMap(Arena* arena) {
 				if (!found[i]) {
 					found[i] = true;
 					boostPadIndexMap[i] = j;
-				} else {
+				}
+				else {
 					RG_ERR_CLOSE(
 						ERROR_PREFIX << "Matched duplicate boost pad at " << targetPos << "=" << padPos
 					);
@@ -56,11 +57,8 @@ void RLGC::GameState::ResetBeforeStep() {
 
 void RLGC::GameState::UpdateFromArena(Arena* arena, const std::vector<Action>& actions, GameState* prev) {
 	this->prev = prev;
-	if (prev) {
-		episodeId = prev->episodeId;
-		episodeStep = prev->episodeStep + 1;
+	if (prev)
 		prev->prev = NULL;
-	}
 
 	lastArena = arena;
 	int tickSkip = RS_MAX(arena->tickCount - lastTickCount, 0);
@@ -68,27 +66,17 @@ void RLGC::GameState::UpdateFromArena(Arena* arena, const std::vector<Action>& a
 
 	ball = arena->ball->GetState();
 
-	std::vector<Car*> cars;
-	arena->GetCarsOrdered(cars);
+	players.resize(arena->_cars.size());
 
-	players.resize(cars.size());
-
-	// Safety: actions should match the player count.
-	// If you *know* they always match, you can omit this, but it's useful for catching bugs.
-	if (!actions.empty() && actions.size() < cars.size()) {
-		RG_ERR_CLOSE("GameState::UpdateFromArena(): actions.size() < cars.size() ("
-			<< actions.size() << " < " << cars.size() << ")");
-	}
-
-	for (int i = 0; i < (int)cars.size(); i++) {
+	auto carItr = arena->_cars.begin();
+	for (int i = 0; i < players.size(); i++) {
 		auto& player = players[i];
 		player.index = i;
-
-		const Action& a = actions.empty() ? Action{} : actions[i]; // if actions can be empty sometimes
-		player.UpdateFromCar(cars[i], arena->tickCount, tickSkip, a, prev ? &prev->players[i] : NULL);
-
+		player.UpdateFromCar(*carItr, arena->tickCount, tickSkip, actions[i], prev ? &prev->players[i] : NULL);
 		if (player.ballTouchedStep)
 			lastTouchCarID = player.carId;
+
+		carItr++;
 	}
 
 	if (!boostPadIndexMapBuilt) {
@@ -96,7 +84,7 @@ void RLGC::GameState::UpdateFromArena(Arena* arena, const std::vector<Action>& a
 		// Check again? This seems stupid but also makes sense to me
 		//	Without this, we could lock as the index map is building, then go build again
 		//	I would like to keep the mutex inside the if statement so it is only checked a few times
-		if (!boostPadIndexMapBuilt) 
+		if (!boostPadIndexMapBuilt)
 			_BuildBoostPadIndexMap(arena);
 		boostPadIndexMapMutex.unlock();
 	}

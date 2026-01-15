@@ -1,3 +1,6 @@
 [submodule "cpp-interface"]
 	path = cpp-interface
 	url = https://github.com/RLBot/cpp-interface
+[submodule "inc/RocketSim"]
+	path = inc/RocketSim
+	url = https://github.com/ZealanL/RocketSim

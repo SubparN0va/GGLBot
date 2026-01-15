@@ -1,7 +1,7 @@
 #pragma once
 
-#include "RocketSim/RocketSim.h"
-#include "RocketSim/Sim/GameEventTracker/GameEventTracker.h"
+#include "RocketSim/src/RocketSim.h"
+#include "RocketSim/src/Sim/GameEventTracker/GameEventTracker.h"
 
 // Use RocketSim namespace
 using namespace RocketSim;
