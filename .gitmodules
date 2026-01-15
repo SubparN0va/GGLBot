@@ -1,0 +1,3 @@
+[submodule "cpp-interface"]
+	path = cpp-interface
+	url = https://github.com/RLBot/cpp-interface

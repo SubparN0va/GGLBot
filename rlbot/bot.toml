@@ -1,0 +1,33 @@
+#:schema https://rlbot.org/schemas/agent.json
+[settings]
+# This must be a unqiue identifier for your bot
+# recommended format is "developer/botname"
+agent_id = "GigaLearn/GGLBot"
+# The name that will be displayed in game
+name = "GGLBot"
+# Path to loadout config from runner
+loadout_file = "loadout.toml"
+# Start your bot with run.bat so it can set the path to libtorch
+# You may get errors trying to run the .exe directly
+run_command = "cmd /C run.bat"
+# This is the path to your bot's logo image,
+# which will be displayed in the GUI
+# The example bot does not have a logo
+logo_file = ""
+
+# These values are optional but useful metadata for helper programs
+[details]
+# Short description of the bot
+description = ""
+# Fun fact about the bot
+fun_fact = "Made with GigaLearn"
+# Link to your repository
+source_link = ""
+# Name of the bot's creator/developer
+developer = "The RLBot community"
+# Programming language
+language = "C++"
+# ALL POSSIBLE TAGS: 1v1, teamplay, goalie, hoops, dropshot, snow-day, rumble, spike-rush, heatseeker, memebot
+# NOTE: Only add the goalie tag if your bot only plays as a goalie; this directly contrasts with the teamplay tag!
+# NOTE: Only add a tag for a special game mode if you bot properly supports it
+tags = []
