@@ -96,8 +96,7 @@ namespace
         if (!ctx)
             return {};
 
-        auto* p = new (std::nothrow) RLBotBot(std::move(indices), team, std::move(name), std::move(ctx));
-        return std::unique_ptr<rlbot::Bot>(p);
+        return std::make_unique<RLBotBot>(std::move(indices), team, std::move(name), std::move(ctx));
     }
 
     class RLBotBotManager final : public rlbot::BotManagerBase

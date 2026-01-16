@@ -10,4 +10,4 @@ TORCH_LIB="${XDG_DATA_HOME:-$HOME/.local/share}/RLBot5/bots/libtorch_cpu/lib"
 export PATH="$TORCH_LIB:$PATH"
 
 cd "$SCRIPT_DIR"
-exec wine "$SCRIPT_DIR/GGLBot.exe" "$@"
+"$SCRIPT_DIR/GGLBot" "$@"
