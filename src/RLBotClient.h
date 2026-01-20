@@ -19,31 +19,28 @@ struct SharedBotContext {
     RLBotParams params;
 };
 
+struct PlayerTimingState {
+    float airTime = 0.f;
+    float airTimeSinceJump = 0.f;
+    bool  lastOnGround = true;
+};
+
 class RLBotBot : public rlbot::Bot {
 public:
-    // Used so that the for loop in update() can actually handle multiple indices correctly
     struct PerBotState {
         bool initialized = false;
 
-        // Position within current macro step [0, tickSkip]
-        int tickInStep = 0;
-
-        // Old action that continues applying until delay expires
-        RLGC::Action prevApplied{};
-
-        // Action computed for the current step
-        RLGC::Action planned{};
-        bool hasPlanned = false;
-
-        // What we output this update
-        RLGC::Action currentOut{};
+        // Queued action and current action
+        RLGC::Action
+            action = {},
+            controls = {};
     };
+    
 
-    std::unordered_map<unsigned, PerBotState> m_botState;
-
-    // Packet-to-packet tick tracking
-    bool m_hasPrevFrame = false;
-    uint32_t m_prevFrame = 0;
+    // Persistent info
+    bool updateAction = true;
+    int ticks = -1;
+    float prevTime = 0;
 
     RLBotBot() noexcept = delete;
     ~RLBotBot() noexcept override;
@@ -53,14 +50,11 @@ public:
         std::string name_,
         std::shared_ptr<const SharedBotContext> ctx_) noexcept;
 
-    RLBotBot(RLBotBot const&) noexcept = delete;
-    RLBotBot(RLBotBot&&) noexcept = delete;
-    RLBotBot& operator=(RLBotBot const&) noexcept = delete;
-    RLBotBot& operator=(RLBotBot&&) noexcept = delete;
-
     void update(rlbot::flat::GamePacket const* packet_,
         rlbot::flat::BallPrediction const* ballPrediction_) noexcept override;
 
 private:
     std::shared_ptr<const SharedBotContext> ctx_;
+    std::unordered_map<unsigned, PerBotState> m_botState;
+    std::vector<PlayerTimingState> m_playerTiming;
 };

@@ -17,11 +17,11 @@ namespace
 
         obj.vel = ToVec(phys->velocity());
         obj.angVel = ToVec(phys->angular_velocity());
-
         return obj;
     }
 
-    Player ToPlayer(const rlbot::flat::PlayerInfo* playerInfo) {
+    Player ToPlayer(const rlbot::flat::PlayerInfo* playerInfo, float dtSec, PlayerTimingState& timing)
+    {
         Player pd = {};
 
         static_cast<PhysState&>(pd) = ToPhysObj(playerInfo->physics());
@@ -30,20 +30,44 @@ namespace
         pd.team = (Team)playerInfo->team();
 
         pd.boost = playerInfo->boost();
-        pd.isOnGround = playerInfo->air_state() == rlbot::flat::AirState::OnGround;
+
+        pd.isOnGround = (playerInfo->air_state() == rlbot::flat::AirState::OnGround);
         pd.hasJumped = playerInfo->has_jumped();
         pd.hasDoubleJumped = playerInfo->has_double_jumped();
-        pd.isDemoed = playerInfo->demolished_timeout() >= 0;
+        pd.hasFlipped = playerInfo->has_dodged();
+        pd.isDemoed = playerInfo->demolished_timeout() >= 0.f;
+
+        // Approximate airtime timers (used for HasFlipOrJump behavior)
+        if (pd.isOnGround) {
+            timing.airTime = 0.f;
+            timing.airTimeSinceJump = 0.f;
+        }
+        else {
+            timing.airTime += dtSec;
+
+            timing.airTimeSinceJump = pd.hasJumped ? timing.airTime : 0.f;
+        }
+
+        pd.airTime = timing.airTime;
+        pd.airTimeSinceJump = timing.airTimeSinceJump;
 
         return pd;
     }
 
-    GameState ToGameState(rlbot::flat::GamePacket const* packet) {
+    GameState ToGameState(rlbot::flat::GamePacket const* packet, float dtSec, std::vector<PlayerTimingState>& playerTiming) {
         GameState gs = {};
 
         auto players = packet->players();
-        for (int i = 0; i < players->size(); i++)
-            gs.players.push_back(ToPlayer(players->Get(i)));
+        if (players) {
+            const int n = (int)players->size();
+            if ((int)playerTiming.size() < n)
+                playerTiming.resize(n);
+
+            gs.players.reserve(n);
+            for (int i = 0; i < n; i++) {
+                gs.players.push_back(ToPlayer(players->Get(i), dtSec, playerTiming[i]));
+            }
+        }
 
         static_cast<PhysState&>(gs.ball) = ToPhysObj(packet->balls()->Get(0)->physics());
 
@@ -63,6 +87,9 @@ namespace
             for (int i = 0; i < CommonValues::BOOST_LOCATIONS_AMOUNT; i++) {
                 gs.boostPads[i] = boostPadStates->Get(i)->is_active();
                 gs.boostPadsInv[CommonValues::BOOST_LOCATIONS_AMOUNT - i - 1] = gs.boostPads[i];
+
+                gs.boostPadTimers[i] = boostPadStates->Get(i)->timer();
+                gs.boostPadTimersInv[CommonValues::BOOST_LOCATIONS_AMOUNT - i - 1] = gs.boostPadTimers[i];
             }
         }
 
@@ -87,102 +114,43 @@ RLBotBot::~RLBotBot() {}
 void RLBotBot::update(rlbot::flat::GamePacket const* packet,
     rlbot::flat::BallPrediction const* ballPrediction_) noexcept
 {
-    if (!packet || !packet->match_info() || !packet->balls()) {
+    if (!packet || !packet->match_info() || !packet->balls() || packet->balls()->size() == 0) {
         for (auto const& index : this->indices) setOutput(index, {});
         return;
     }
 
-    // If there's no ball, there's nothing to chase; output zeros for all
-    if (packet->balls()->size() == 0) {
-        for (auto const& index : this->indices) setOutput(index, {});
-        return;
-    }
+    float curTime = packet->match_info()->seconds_elapsed();
+    float deltaTime = curTime - prevTime;
+    prevTime = curTime;
 
-    // Build GameState once per packet
-    GameState gs = ToGameState(packet);
+    int ticksElapsed = roundf(deltaTime * 120);
+    ticks += ticksElapsed;
 
-    uint32_t curFrame = packet->match_info()->frame_num();
-
-    uint32_t rawDt = 1;
-    if (m_hasPrevFrame) {
-        rawDt = curFrame - m_prevFrame;
-        if (rawDt == 0) rawDt = 1;
-    }
-
-    uint32_t dtFrames = rawDt;
-
-    // Treat very large jumps as a discontinuity/reset
-    if (dtFrames > 240) {
-        dtFrames = 1;
-        m_botState.clear();
-    }
-
-    m_prevFrame = curFrame;
-    m_hasPrevFrame = true;
-
-    const int tickSkip = std::max(1, ctx_->params.tickSkip);
-    int actionDelay = ctx_->params.actionDelay;
-    if (actionDelay < 0) actionDelay = 0;
-    if (actionDelay > tickSkip) actionDelay = tickSkip;
-
-    // Process each controlled player index independently
+    GameState gs = ToGameState(packet, deltaTime, m_playerTiming);
+    
     for (auto const& index : this->indices)
     {
-        // If we're not in the game packet; output zeros
-        if (!packet->players() || packet->players()->size() <= index) {
-            setOutput(index, {});
-            continue;
-        }
-        if ((int)gs.players.size() <= (int)index) {
-            setOutput(index, {});
-            continue;
-        }
-
-        // Get per-bot state
         auto& st = m_botState[index];
         if (!st.initialized) {
             st.initialized = true;
-            st.tickInStep = 0;
-            st.prevApplied = RLGC::Action{};
-            st.planned = RLGC::Action{};
-            st.hasPlanned = false;
-            st.currentOut = RLGC::Action{};
+
+            st.action = RLGC::Action{};
+            st.controls = RLGC::Action{};
         }
 
-        // Advance by dtFrames ticks
-        // If dtFrames > 1, we don't have intermediate obs, so keep the same planned action for those missing ticks.
-        for (uint32_t k = 0; k < dtFrames; ++k) {
-            // At the start of each macro-step, compute a new planned action once
-            if (st.tickInStep == 0) {
-                auto& localPlayer = gs.players[index];
-                localPlayer.prevAction = st.prevApplied;
-                st.planned = ctx_->inferUnit->InferAction(localPlayer, gs, true);
-                st.hasPlanned = true;
-            }
+        auto& localPlayer = gs.players[index];
+        localPlayer.prevAction = st.controls;
 
-            if (st.tickInStep < actionDelay || !st.hasPlanned) {
-                st.currentOut = st.prevApplied;
-            }
-            else {
-                st.currentOut = st.planned;
-            }
-
-            // Advance within the macro-step
-            st.tickInStep++;
-
-            // Macro-step boundary
-            if (st.tickInStep >= tickSkip) {
-                st.tickInStep = 0;
-
-                // Planned action becomes the old action for next step
-                if (st.hasPlanned) {
-                    st.prevApplied = st.planned;
-                }
-                st.hasPlanned = false;
-            }
+        if (updateAction) {
+            st.action = ctx_->inferUnit->InferAction(localPlayer, gs, true);
         }
 
-        const auto& c = st.currentOut;
+        if (ticks >= (ctx_->params.actionDelay) || ticks == -1) {
+            // Apply new action
+            st.controls = st.action;
+        }
+
+        const auto& c = st.controls;
         setOutput(index, {
             c.throttle,
             c.steer,
@@ -194,5 +162,15 @@ void RLBotBot::update(rlbot::flat::GamePacket const* packet,
             c.handbrake > 0.5f,
             false,
             });
+    }
+
+    if (updateAction) {
+        updateAction = false;
+    }
+
+    if (ticks >= ctx_->params.tickSkip || ticks == -1) {
+        // Trigger action update next tick
+        ticks = 0;
+        updateAction = true;
     }
 }
