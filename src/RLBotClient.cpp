@@ -115,7 +115,6 @@ void RLBotBot::update(rlbot::flat::GamePacket const* packet,
     rlbot::flat::BallPrediction const* ballPrediction_) noexcept
 {
     if (!packet || !packet->match_info() || !packet->balls() || packet->balls()->size() == 0) {
-        for (auto const& index : this->indices) setOutput(index, {});
         return;
     }
 
