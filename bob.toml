@@ -1,0 +1,7 @@
+[[config]]
+project_name = "GGLBot"
+bot_configs = ["rlbot/bot.toml"]
+
+[config.builder_config]
+builder_type = "custom"
+dockerfile = "cpp.Dockerfile"

@@ -15,7 +15,7 @@ run_command_linux = "bash -lc ./run.sh"
 # This is the path to your bot's logo image,
 # which will be displayed in the GUI
 # The example bot does not have a logo
-logo_file = ""
+# logo_file = ""
 
 # These values are optional but useful metadata for helper programs
 [details]
