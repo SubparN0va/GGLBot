@@ -35,7 +35,26 @@ ENV PATH="C:\Program Files\Git\cmd;C:\Program Files\Git\bin;C:\ProgramData\choco
 
 RUN C:\Windows\System32\where.exe git && git --version
 
+# ============================================================
+# Download and extract LibTorch (CPU version)
+# ============================================================
+SHELL ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
+
+RUN $ErrorActionPreference = 'Stop'; `
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; `
+    Write-Host 'Downloading LibTorch CPU version...'; `
+    $libtorchUrl = 'https://download.pytorch.org/libtorch/cpu/libtorch-win-shared-with-deps-2.5.1%2Bcpu.zip'; `
+    $libtorchZip = 'C:\libtorch.zip'; `
+    Invoke-WebRequest -Uri $libtorchUrl -OutFile $libtorchZip -UseBasicParsing; `
+    Write-Host 'Extracting LibTorch...'; `
+    Expand-Archive -Path $libtorchZip -DestinationPath 'C:\' -Force; `
+    Remove-Item $libtorchZip -Force; `
+    Write-Host 'LibTorch extraction complete';
+
 SHELL ["C:\\Windows\\System32\\cmd.exe", "/S", "/C"]
+
+# Verify libtorch was extracted
+RUN if not exist C:\libtorch\NUL (echo ERROR: LibTorch extraction failed & exit /b 1)
 
 # ============================================================
 # Copy project into container
@@ -43,15 +62,12 @@ SHELL ["C:\\Windows\\System32\\cmd.exe", "/S", "/C"]
 WORKDIR C:\src
 COPY . C:\src
 
-# Sanity: libtorch must exist at repo root
-RUN if not exist C:\src\libtorch\NUL (echo ERROR: Expected C:\src\libtorch at repo root & exit /b 1)
-
 # ============================================================
 # Configure + Build (VS generator)
 # ============================================================
 RUN call "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat" -arch=amd64 && `
     cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
-      -DLIBTORCH_ROOT=C:\src\libtorch `
+      -DLIBTORCH_ROOT=C:\libtorch `
       -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=C:\src\_BIN `
       -DGGLBOT_COPY_TO_RLBOT=OFF && `
     cmake --build build --config Release -- /m
@@ -86,8 +102,8 @@ RUN if exist "C:\src\rlbot" ( `
 RUN if exist "C:\src\_BIN\*.dll" (copy /Y "C:\src\_BIN\*.dll" "C:\src\_BOB_OUT\x86_64-pc-windows-msvc\") else (echo No project DLLs in _BIN)
 
 # Copy libtorch runtime DLLs beside the exe
-RUN if exist "C:\src\libtorch\lib\*.dll" (copy /Y "C:\src\libtorch\lib\*.dll" "C:\src\_BOB_OUT\x86_64-pc-windows-msvc\") else (echo No DLLs in libtorch\lib) && `
-    if exist "C:\src\libtorch\bin\*.dll" (copy /Y "C:\src\libtorch\bin\*.dll" "C:\src\_BOB_OUT\x86_64-pc-windows-msvc\") else (echo No DLLs in libtorch\bin)
+RUN if exist "C:\libtorch\lib\*.dll" (copy /Y "C:\libtorch\lib\*.dll" "C:\src\_BOB_OUT\x86_64-pc-windows-msvc\") else (echo No DLLs in libtorch\lib) && `
+    if exist "C:\libtorch\bin\*.dll" (copy /Y "C:\libtorch\bin\*.dll" "C:\src\_BOB_OUT\x86_64-pc-windows-msvc\") else (echo No DLLs in libtorch\bin)
 
 # List output contents for fun
 RUN dir /b "C:\src\_BOB_OUT\x86_64-pc-windows-msvc"

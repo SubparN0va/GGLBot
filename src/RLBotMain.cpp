@@ -144,7 +144,7 @@ int main(int argc, char** argv)
     // ------------------------------------------
     std::filesystem::path exeDir;
     if (!argv[0]) {
-        exeDir = std::filesystem::current_path();
+        exeDir = std::filesystem::current_path().parent_path();
     }
     else {
         std::filesystem::path p(argv[0]);
@@ -159,7 +159,7 @@ int main(int argc, char** argv)
         ctx->act.get(),
         sharedHeadCfg,
         policyCfg,
-        exeDir, // Put model files next to exe
+        exeDir, // Put model files next to bot.toml
         useGPU
     );
 
@@ -176,7 +176,7 @@ int main(int argc, char** argv)
         }();
 
     // Read agent_id from bot.toml next to the exe
-    const std::filesystem::path botTomlPath = exeDir / "bot.toml";
+    const std::filesystem::path botTomlPath = exeDir.parent_path() / "bot.toml";
     std::string agentIdStr = "GigaLearn/GGLBot"; // fallback default
     if (auto maybeId = ReadAgentIdFromBotToml(botTomlPath)) {
         agentIdStr = *maybeId;

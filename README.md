@@ -1,16 +1,38 @@
-# GGLBot
-Creates everything you need to get your bot made with GigaLearn (GGL) up and running in RLBot v5 using bob the bot builder!
-
-## Features
-Uses bob the bot builder to generate your GGL bot inside a container and then outputs it to `bob_build\` folder. All you need to do is add libtorch, your Obs Builder, Action Parser, InferUnit config, and .lt models.
+# GGLBot - Bob Branch
+The main purpose of this branch of GGLBot is to submit your bot to tournaments or Rocket Host since it allows the host to build your bot using bob the bot builder. If you are just wanting to play your bot in RLBot, the `main` branch is likely what you want to use since it is a simpler process.
 
 ## Instructions
+The instructions are broken down into three steps:
+1. Preparing your bot
+2. Submitting your bot
+3. (Optional) Building your bot with bob
+
+If you are submitting your bot, you only need to worry about step one and two. The host will build your bot for you.
+
+### 1. Preparing your bot for submission
 * Clone the bob branch of this repo recursively: `git clone --branch bob https://github.com/SubparN0va/GGLBot --recurse-submodules`
 * Update `RLBotMain.cpp` with your Obs Builder, Action Parser, and InferUnit config
   * If creating new obs or parser files, make sure you update the `#include` at the top of `RLBotClient.h`
-* Put libtorch in the root directory (only the necessary .dlls will be copied by bob to minimize size of the output)
-* Put your models (.lt files) into the `rlbot\` folder (these will be copied to the output folder automatically)
-* Update the bob.toml project_name, bot.toml and loadout.toml to your preference
+* Put your models (.lt files) into the `rlbot\` folder (these will be copied to the output folder automatically at build time)
+* When the host builds your bot, the docker will download and use Libtorch CPU Version 2.5.1 by default
+  * If you need a specific version of libtorch for your bot, change line 46 of `cpp.Dockerfile` to point to the version you want (`$libtorchUrl = 'put_your_libtorch_url_here';`)
+* Update the `project_name` in bob.toml, and all of bot.toml and loadout.toml to your preference
+* If you're using a logo, name it `logo.png` and put it in the `rlbot\` folder
+
+Note: At this point, if you want, you can build your bot using your IDE to ensure it compiles (don't try to run the .exe directly, you'll get an error - this is normal because it must be started by run.bat instead). If you do build your bot before submitting it, make sure you don't include the `out\` or `.vs\` folders and don't include `GGLBot.exe` in the `rlbot\` folder when creating your .zip file.
+
+### 2. Submitting your bot
+* Package the following files and folders into a .zip file:
+  * `cpp-interface\`
+  * `inc\`
+  * `rlbot\`
+  * `bob.toml`
+  * `CMakeLists.txt`
+  * `cpp.Dockerfile`
+* Send the .zip file to the host
+
+### 3. Building your bot with bob
+Note: If you're submitting your bot to a tournament or Rocket Host, you can skip this step! The host will build your bot for you using the instructions below.
 * Install bob the bot builder from `https://github.com/swz-git/bob`
 * Install Docker Desktop and make sure you switch to Windows containers
 * In command prompt, navigate to your GGLBot root directory. Then enter `<path to bob.exe> build bob.toml`
