@@ -150,6 +150,30 @@ int main(int argc, char** argv)
         std::filesystem::path p(argv[0]);
         exeDir = p.parent_path();
     }
+    std::filesystem::path parentDir = exeDir.parent_path();
+
+    // If there are no .lt files in cwd, but there are in parent, use parent.
+    bool hasLtInExeDir = false;
+    bool hasLtInParent = false;
+
+    auto hasLtFiles = [](const std::filesystem::path& dir) -> bool {
+        std::error_code ec;
+        if (!std::filesystem::exists(dir, ec) || !std::filesystem::is_directory(dir, ec)) return false;
+
+        for (const auto& e : std::filesystem::directory_iterator(dir, ec)) {
+            if (ec) break;
+            if (e.is_regular_file(ec) && e.path().extension() == ".lt") return true;
+        }
+        return false;
+        };
+
+    // Search for the .lt models (bob puts them in parentDir, building with IDE does not)
+    hasLtInExeDir = hasLtFiles(exeDir);
+    hasLtInParent = hasLtFiles(parentDir);
+
+    if (!hasLtInExeDir && hasLtInParent) {
+        exeDir = parentDir;
+    }
 
     bool useGPU = false;
 
@@ -175,10 +199,16 @@ int main(int argc, char** argv)
         return env ? env : "23234";
         }();
 
-    // Read agent_id from bot.toml next to the exe
-    const std::filesystem::path botTomlPath = exeDir.parent_path() / "bot.toml";
+    // Read agent_id from bot.toml near the exe
     std::string agentIdStr = "GigaLearn/GGLBot"; // fallback default
-    if (auto maybeId = ReadAgentIdFromBotToml(botTomlPath)) {
+
+    const std::filesystem::path botTomlPath1 = exeDir / "bot.toml";
+    const std::filesystem::path botTomlPath2 = exeDir.parent_path() / "bot.toml";
+
+    if (auto maybeId = ReadAgentIdFromBotToml(botTomlPath1)) {
+        agentIdStr = *maybeId;
+    }
+    else if (auto maybeId = ReadAgentIdFromBotToml(botTomlPath2)) {
         agentIdStr = *maybeId;
     }
 
