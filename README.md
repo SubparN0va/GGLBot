@@ -26,6 +26,7 @@ Note: At this point, if you want, you can build your bot using your IDE to ensur
   * `cpp-interface\`
   * `inc\`
   * `rlbot\`
+  * `src\`
   * `bob.toml`
   * `CMakeLists.txt`
   * `cpp.Dockerfile`
