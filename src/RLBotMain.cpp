@@ -139,6 +139,8 @@ int main(int argc, char** argv)
     policyCfg.activationType = GGL::ModelActivationType::RELU;
     policyCfg.addOutputLayer = true;
 
+    const bool useBallPrediction = false; // Set to true if using the built in ball prediction sent to RLBotBot::update in RLBotClient
+
     // ------------------------------------------
     // Everything below can usually be left as is
     // ------------------------------------------
@@ -214,7 +216,7 @@ int main(int argc, char** argv)
 
     RLBotBotManager manager(false);
 
-    if (!manager.connect(serverHost, serverPort, agentIdStr.c_str(), false)) {
+    if (!manager.connect(serverHost, serverPort, agentIdStr.c_str(), useBallPrediction)) {
         return EXIT_FAILURE;
     }
 
