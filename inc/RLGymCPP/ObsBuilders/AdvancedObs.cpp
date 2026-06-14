@@ -1,5 +1,5 @@
 #include "AdvancedObs.h"
-#include <RLGymCPP/Gamestates/StateUtil.h>
+#include <RLGymCPP/GameStates/StateUtil.h>
 
 void RLGC::AdvancedObs::AddPlayerToObs(FList& obs, const Player& player, bool inv, const PhysState& ball) {
 	auto phys = InvertPhys(player, inv);

@@ -6,3 +6,4 @@ CMakeSettings.json
 /libtorch
 /bob_build
 rlbot/logo.png
+/build

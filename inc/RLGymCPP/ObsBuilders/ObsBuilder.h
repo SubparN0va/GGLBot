@@ -1,5 +1,5 @@
 #pragma once
-#include "../Gamestates/GameState.h"
+#include "../GameStates/GameState.h"
 #include "../BasicTypes/Action.h"
 #include "../BasicTypes/Lists.h"
 

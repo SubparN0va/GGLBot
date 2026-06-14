@@ -1,5 +1,5 @@
 #pragma once
-#include "RLGymCPP/Gamestates/GameState.h"
+#include "RLGymCPP/GameStates/GameState.h"
 #include "RLGymCPP/BasicTypes/Action.h"
 #include "RLGymCPP/BasicTypes/Lists.h"
 

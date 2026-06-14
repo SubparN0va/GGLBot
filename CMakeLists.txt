@@ -43,10 +43,10 @@ add_custom_command(TARGET GGLBot POST_BUILD
   VERBATIM
 )
 
-# Allow override: -DLIBTORCH_ROOT="C:/path/to/libtorch_cpu"
+# Allow override: -DLIBTORCH_ROOT="C:/path/to/torch"
 if(NOT DEFINED LIBTORCH_ROOT)
     if(WIN32)
-        set(LIBTORCH_ROOT "$ENV{LOCALAPPDATA}/RLBot5/bots/libtorch_cpu")
+        set(LIBTORCH_ROOT "$ENV{LOCALAPPDATA}/RLBot5/bots/torch-archive/torch")
     else()
         message(FATAL_ERROR "LIBTORCH_ROOT not set (and non-Windows build). Set -DLIBTORCH_ROOT=...") 
     endif()
