@@ -3,11 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Equivalent to Windows %LOCALAPPDATA%\RLBot5\bots\libtorch_cpu\lib
-TORCH_LIB="${XDG_DATA_HOME:-$HOME/.local/share}/RLBot5/bots/libtorch_cpu/lib"
+# Equivalent to Windows %LOCALAPPDATA%\RLBot5\bots\torch-archive\torch\lib
+export LD_LIBRARY_PATH="${XDG_DATA_HOME:-$HOME/.local/share}/RLBot5/bots/torch-archive/torch/lib"
 
-# Wine uses PATH to locate DLLs (closest equivalent to Windows PATH)
-export PATH="$TORCH_LIB:$PATH"
-
-cd "$SCRIPT_DIR"
-"$SCRIPT_DIR/GGLBot" "$@"
+exec "$SCRIPT_DIR/GGLBot" "$@"
