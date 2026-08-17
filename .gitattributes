@@ -1,2 +1,9 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Keep files parsed or executed by Linux tooling checkout-safe on Windows.
+Dockerfile text eol=lf
+dockerfile text eol=lf
+*.Dockerfile text eol=lf
+*.dockerfile text eol=lf
+*.sh text eol=lf
