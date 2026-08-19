@@ -12,6 +12,10 @@ loadout_file = "loadout.toml"
 run_command = "cmd /C run.bat"
 # The command RLBot will call to start your bot on linux
 run_command_linux = "bash -lc ./run.sh"
+
+[settings.environment]
+Path = "C:\\Users\\jscoo\\AppData\\Local\\RLBot5\\bots\\torch-archive\\torch\\lib"
+
 # This is the path to your bot's logo image,
 # which will be displayed in the GUI
 # The example bot does not have a logo
@@ -29,7 +33,7 @@ source_link = ""
 developer = "The RLBot community"
 # Programming language
 language = "C++"
-# ALL POSSIBLE TAGS: 1v1, teamplay, goalie, hoops, dropshot, snow-day, rumble, spike-rush, heatseeker, memebot
+# ALL POSSIBLE TAGS: "1v1", "teamplay", "goalie", "hoops", "dropshot", "snow-day", "rumble", "spike-rush", "heatseeker", "memebot"
 # NOTE: Only add the goalie tag if your bot only plays as a goalie; this directly contrasts with the teamplay tag!
 # NOTE: Only add a tag for a special game mode if you bot properly supports it
 tags = []

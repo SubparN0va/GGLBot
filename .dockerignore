@@ -1,0 +1,9 @@
+.git/
+.gitattributes
+.gitignore
+.gitmodules
+build/
+_BIN/
+_BOB_OUT/
+*.Dockerfile
+README.md

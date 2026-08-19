@@ -26,6 +26,24 @@ trails_id = 3220
 # Goal Explosion Selection
 goal_explosion_id = 3018
 
+[blue_loadout.paint]
+# car_paint_id
+car_paint_id = 12
+# decal_paint_id
+decal_paint_id = 0
+# wheels_paint_id
+wheels_paint_id = 7
+# boost_paint_id
+boost_paint_id = 7
+# antenna_paint_id
+antenna_paint_id = 0
+# hat_paint_id
+hat_paint_id = 0
+# trails_paint_id
+trails_paint_id = 2
+# goal_explosion_paint_id
+goal_explosion_paint_id = 0
+
 [orange_loadout]
 # Primary Color selection
 team_color_id = 3
@@ -54,24 +72,6 @@ trails_id = 3220
 # Goal Explosion Selection
 goal_explosion_id = 3018
 
-[blue_loadout.paint]
-# car_paint_id
-car_paint_id = 12
-# decal_paint_id
-decal_paint_id = 0
-# wheels_paint_id
-wheels_paint_id = 7
-# boost_paint_id
-boost_paint_id = 7
-# antenna_paint_id
-antenna_paint_id = 0
-# hat_paint_id
-hat_paint_id = 0
-# trails_paint_id
-trails_paint_id = 2
-# goal_explosion_paint_id
-goal_explosion_paint_id = 0
-
 [orange_loadout.paint]
 # car_paint_id
 car_paint_id = 12
@@ -89,4 +89,3 @@ hat_paint_id = 0
 trails_paint_id = 14
 # goal_explosion_paint_id
 goal_explosion_paint_id = 0
-
