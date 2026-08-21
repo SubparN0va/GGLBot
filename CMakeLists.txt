@@ -12,7 +12,7 @@ if(NOT WIN32)
   target_compile_definitions(RLBotCPP-static PUBLIC _GLIBCXX_USE_CXX11_ABI=0)
 endif()
 
-# ---- GGLBot (EXE) ----
+# ---- GGLBot core (Torch-linked executable) ----
 file(GLOB_RECURSE GGLBOT_SOURCES CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/inc/*.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/inc/*.cpp"
@@ -26,23 +26,40 @@ file(GLOB_RECURSE GGLBOT_HEADERS CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
 )
 
-add_executable(GGLBot
+add_executable(GGLBotCore
   ${GGLBOT_SOURCES}
   ${GGLBOT_HEADERS}
 )
 
-target_compile_features(GGLBot PRIVATE cxx_std_20)
+target_compile_features(GGLBotCore PRIVATE cxx_std_20)
 
-target_include_directories(GGLBot PRIVATE
+target_include_directories(GGLBotCore PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}"
   "${CMAKE_CURRENT_SOURCE_DIR}/inc"
   "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
 
-target_link_libraries(GGLBot PRIVATE RLBotCPP-static)
+target_link_libraries(GGLBotCore PRIVATE RLBotCPP-static)
 
-# Copy the exe to the rlbot/ folder so it doesn't have to be done manually
+# ---- GGLBot launcher (no Torch dependency) ----
+add_executable(GGLBot launcher/GGLBotLauncher.cpp)
+target_compile_features(GGLBot PRIVATE cxx_std_20)
+add_dependencies(GGLBot GGLBotCore)
+
+if(WIN32)
+  target_link_libraries(GGLBot PRIVATE shell32)
+endif()
+
+# Deploy the launcher beside bot.toml and keep the core in its runtime folder.
 set(GGLBOT_DEPLOY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/rlbot")
+set(GGLBOT_RUNTIME_DIR "${GGLBOT_DEPLOY_DIR}/000-runtime")
+add_custom_command(TARGET GGLBotCore POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E make_directory "${GGLBOT_RUNTIME_DIR}"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "$<TARGET_FILE:GGLBotCore>"
+          "${GGLBOT_RUNTIME_DIR}/$<TARGET_FILE_NAME:GGLBotCore>"
+  VERBATIM
+)
 add_custom_command(TARGET GGLBot POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E make_directory "${GGLBOT_DEPLOY_DIR}"
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -80,4 +97,4 @@ else()
   set(_TORCH_LINK ${TORCH_LIBRARIES})
 endif()
 
-target_link_libraries(GGLBot PRIVATE ${_TORCH_LINK})
+target_link_libraries(GGLBotCore PRIVATE ${_TORCH_LINK})

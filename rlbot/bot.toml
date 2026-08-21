@@ -7,14 +7,11 @@ agent_id = "GigaLearn/GGLBot"
 name = "GGLBot"
 # Path to loadout config from runner
 loadout_file = "loadout.toml"
-# Start your bot with run.bat so it can set the path to libtorch
-# You may get errors trying to run the .exe directly
-run_command = "cmd /C run.bat"
-# The command RLBot will call to start your bot on linux
-run_command_linux = "bash -lc ./run.sh"
-
-[settings.environment]
-Path = "C:\\Users\\jscoo\\AppData\\Local\\RLBot5\\bots\\torch-archive\\torch\\lib"
+# The native launcher resolves the shared LibTorch runtime before starting the bot core
+# The command RLBot will call to start your bot on Windows
+run_command = "GGLBot.exe"
+# The command RLBot will call to start your bot on Linux
+run_command_linux = "./GGLBot"
 
 # This is the path to your bot's logo image,
 # which will be displayed in the GUI

@@ -19,12 +19,15 @@ If you are submitting your bot, you only need to worry about step one and two. T
 * Update the `project_name` in bob.toml, and all of bot.toml and loadout.toml to your preference
 * If you're using a logo, name it `logo.png` and put it in the `rlbot\` folder
 
-Note: At this point, if you want, you can build your bot using your IDE to ensure it compiles (don't try to run the .exe directly, you'll get an error - this is normal because it must be started by run.bat instead). If you do build your bot before submitting it, make sure you don't include the `out\` or `.vs\` folders and don't include `GGLBot.exe` in the `rlbot\` folder when creating your .zip file.
+The build produces a small native launcher named `GGLBot` and a Torch-linked core in `000-runtime\`. The launcher searches for `torch-archive` near the bot first, then checks the current user's standard RLBot data directory. This allows a `bob_build\` package to run from any location without bundling the large LibTorch runtime.
+
+Note: At this point, if you want, you can build your bot using your IDE to ensure it compiles. Test the executable through RLBot v5 so it receives the required RLBot connection environment. If you do build your bot before submitting it, make sure you don't include the `out\` or `.vs\` folders and don't include generated executables or the `rlbot\000-runtime\` folder when creating your .zip file.
 
 ### 2. Submitting your bot
 * Package the following files and folders into a .zip file:
   * `cpp-interface\`
   * `inc\`
+  * `launcher\`
   * `rlbot\`
   * `src\`
   * `bob.toml`
@@ -37,4 +40,5 @@ Note: If you're submitting your bot to a tournament or Rocket Host, you can skip
 * Install bob the bot builder from `https://github.com/swz-git/bob`
 * Install Docker Desktop and make sure it's set to Linux containers
 * In command prompt, navigate to your GGLBot root directory. Then enter `<path to bob.exe> build bob.toml`
-* In RLBot v5, add the `bob_build\` folder
+* Make sure RLBot's `torch-archive` runtime is installed
+* In RLBot v5, add the `bob_build\` folder; it can remain outside the RLBot bots directory

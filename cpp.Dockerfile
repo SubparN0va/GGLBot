@@ -144,25 +144,29 @@ RUN cmake -S . -B build-win -G "Ninja" \
 # --- Linux package -------------------------------------------------------
 RUN mkdir -p /out/x86_64-unknown-linux-gnu
 
-# Copy the built Linux GGLBot
-RUN if [ ! -f /src/build-linux/GGLBot ]; then \
-        echo "ERROR: Expected /src/build-linux/GGLBot but it is missing."; \
+# Copy the Linux launcher and Torch-linked core
+RUN mkdir -p /out/x86_64-unknown-linux-gnu/000-runtime
+RUN if [ ! -f /src/build-linux/GGLBot ] || [ ! -f /src/build-linux/GGLBotCore ]; then \
+        echo "ERROR: Expected Linux launcher/core outputs but one is missing."; \
         exit 1; \
     fi && \
-    cp /src/build-linux/GGLBot /out/x86_64-unknown-linux-gnu/GGLBot
+    cp /src/build-linux/GGLBot /out/x86_64-unknown-linux-gnu/GGLBot && \
+    cp /src/build-linux/GGLBotCore /out/x86_64-unknown-linux-gnu/000-runtime/GGLBotCore
 
 # --- Windows package -----------------------------------------------------
 RUN mkdir -p /out/x86_64-pc-windows-msvc
 
-# Copy the built Windows GGLBot.exe
-RUN if [ ! -f /src/build-win/GGLBot.exe ]; then \
-        echo "ERROR: Expected /src/build-win/GGLBot.exe but it is missing."; \
+# Copy the Windows launcher and Torch-linked core
+RUN mkdir -p /out/x86_64-pc-windows-msvc/000-runtime
+RUN if [ ! -f /src/build-win/GGLBot.exe ] || [ ! -f /src/build-win/GGLBotCore.exe ]; then \
+        echo "ERROR: Expected Windows launcher/core outputs but one is missing."; \
         find /src/build-win -name "GGLBot*" -type f 2>/dev/null || true; \
         exit 1; \
     fi && \
-    cp /src/build-win/GGLBot.exe /out/x86_64-pc-windows-msvc/GGLBot.exe
+    cp /src/build-win/GGLBot.exe /out/x86_64-pc-windows-msvc/GGLBot.exe && \
+    cp /src/build-win/GGLBotCore.exe /out/x86_64-pc-windows-msvc/000-runtime/GGLBotCore.exe
 
-# Copy any *.lt model files from rlbot (recursively) beside both binaries
+# Copy any *.lt model files from rlbot into both platform directories
 RUN if [ -d /src/rlbot ]; then \
         shopt -s globstar nullglob; \
         for f in /src/rlbot/**/*.lt; do \
@@ -174,7 +178,8 @@ RUN if [ -d /src/rlbot ]; then \
         echo "No rlbot folder found at /src/rlbot"; \
     fi
 
-# Emit tar to stdout for bob (includes both platform directories)
-ENTRYPOINT ["tar", "-C", "/out", "-cf", "-", \
+# Emit tar to stdout for bob. Sorting places 000-runtime before the launcher,
+# so bob selects the launcher as the platform entry point.
+ENTRYPOINT ["tar", "--sort=name", "-C", "/out", "-cf", "-", \
     "x86_64-unknown-linux-gnu", \
     "x86_64-pc-windows-msvc"]
