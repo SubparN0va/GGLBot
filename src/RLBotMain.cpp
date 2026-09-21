@@ -2,6 +2,9 @@
 
 #include <rlbot/BotManager.h>
 
+#include <torch/cuda.h>
+
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 
@@ -177,7 +180,18 @@ int main(int argc, char** argv)
         exeDir = parentDir;
     }
 
-    bool useGPU = false;
+    // GPU inference is mandatory: this core is linked against CUDA LibTorch and the
+    // policy is sized for the GPU. Exit loudly rather than silently degrade to CPU.
+    if (!torch::cuda::is_available()) {
+        std::fprintf(stderr,
+            "GGLBot: CUDA is NOT available - refusing to start.\n"
+            "  Check that an NVIDIA GPU is present, the driver supports the CUDA version LibTorch was built with,\n"
+            "  and that the launcher found the CUDA LibTorch runtime (torch_cuda.dll).\n");
+        return EXIT_FAILURE;
+    }
+    std::printf("GGLBot: CUDA available (%d device%s) -> running inference on GPU\n",
+        (int)torch::cuda::device_count(), torch::cuda::device_count() == 1 ? "" : "s");
+    const bool useGPU = true;
 
     ctx->inferUnit = std::make_shared<GGL::InferUnit>(
         ctx->obs.get(),

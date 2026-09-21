@@ -22,9 +22,23 @@ namespace
     constexpr int TORCH_SEARCH_DEPTH = 5;
 
 #ifdef _WIN32
-    constexpr wchar_t TORCH_MARKER[] = L"torch_cpu.dll";
+    // The Windows core is linked against the CUDA LibTorch build, so only accept a
+    // runtime folder that actually contains torch_cuda.dll (RLBot's CPU torch-archive
+    // has torch_cpu.dll but not torch_cuda.dll and would fail to load the core).
+    constexpr wchar_t TORCH_MARKER[] = L"torch_cuda.dll";
+
+    // Runtime folder to look for, relative to each search root. The libtorch zip
+    // extracts to "libtorch\", so extracting it straight into RLBot5\bots\ gives
+    // exactly this layout.
+    const std::filesystem::path TORCH_RELATIVE_LIB_DIRS[] = {
+        std::filesystem::path("libtorch") / "lib",
+    };
 #else
     constexpr char TORCH_MARKER[] = "libtorch_cpu.so";
+
+    const std::filesystem::path TORCH_RELATIVE_LIB_DIRS[] = {
+        std::filesystem::path("torch-archive") / "torch" / "lib",
+    };
 #endif
 
     bool IsTorchLibDirectory(const std::filesystem::path& directory)
@@ -33,15 +47,25 @@ namespace
         return std::filesystem::is_regular_file(directory / TORCH_MARKER, error);
     }
 
+    std::optional<std::filesystem::path> FindTorchLibUnder(const std::filesystem::path& root)
+    {
+        for (const auto& relative : TORCH_RELATIVE_LIB_DIRS)
+        {
+            auto candidate = root / relative;
+            if (IsTorchLibDirectory(candidate))
+                return candidate;
+        }
+        return std::nullopt;
+    }
+
     std::optional<std::filesystem::path> FindNearbyTorchLib(
         const std::filesystem::path& launcherDirectory)
     {
         auto directory = launcherDirectory;
         for (int level = 0; level < TORCH_SEARCH_DEPTH; ++level)
         {
-            auto candidate = directory / "torch-archive" / "torch" / "lib";
-            if (IsTorchLibDirectory(candidate))
-                return candidate;
+            if (auto found = FindTorchLibUnder(directory))
+                return found;
 
             auto parent = directory.parent_path();
             if (parent == directory)
@@ -74,11 +98,7 @@ namespace
         if (!localAppData)
             return std::nullopt;
 
-        auto candidate = std::filesystem::path(*localAppData)
-            / "RLBot5" / "bots" / "torch-archive" / "torch" / "lib";
-        return IsTorchLibDirectory(candidate)
-            ? std::optional<std::filesystem::path>(std::move(candidate))
-            : std::nullopt;
+        return FindTorchLibUnder(std::filesystem::path(*localAppData) / "RLBot5" / "bots");
     }
 
     std::optional<std::filesystem::path> GetLauncherPath()
@@ -261,10 +281,7 @@ namespace
             return std::nullopt;
         }
 
-        auto candidate = dataHome / "RLBot5" / "bots" / "torch-archive" / "torch" / "lib";
-        return IsTorchLibDirectory(candidate)
-            ? std::optional<std::filesystem::path>(std::move(candidate))
-            : std::nullopt;
+        return FindTorchLibUnder(dataHome / "RLBot5" / "bots");
     }
 
     std::optional<std::filesystem::path> GetLauncherPath(const char* argumentZero)
@@ -343,7 +360,12 @@ int main(int argc, char** argv)
         torchLib = FindDefaultTorchLib();
     if (!torchLib)
     {
+#ifdef _WIN32
+        std::cerr << "GGLBot launcher: could not find the shared CUDA LibTorch runtime.\n"
+                     "Expected torch_cuda.dll in %LOCALAPPDATA%\\RLBot5\\bots\\libtorch\\lib\n";
+#else
         std::cerr << "GGLBot launcher: could not find the RLBot torch-archive runtime.\n";
+#endif
         return EXIT_FAILURE;
     }
     if (!PrependTorchToPath(*torchLib))

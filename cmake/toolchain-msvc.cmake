@@ -39,7 +39,7 @@ set(CMAKE_FIND_LIBRARY_SUFFIXES .lib .dll .dll.a .a)
 
 # Tell CMake search to prefer xwin + libtorch
 set(CMAKE_FIND_ROOT_PATH
-  /tmp/xwin/crt /tmp/xwin/sdk /tmp/botpack-win/torch-archive/torch
+  /tmp/xwin/crt /tmp/xwin/sdk /tmp/libtorch-win
 )
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)

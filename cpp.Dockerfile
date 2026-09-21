@@ -82,34 +82,24 @@ RUN xwin --accept-license splat --output /tmp/xwin && \
     find /tmp/xwin -name "*.lib" | head -20
 
 # ============================================================
-# Download and extract PyTorch botpack – Linux version (CPU)
+# Download and extract LibTorch – Windows version (CUDA 12.6, MSVC)
 # ============================================================
-RUN echo "Downloading PyTorch botpack (Linux) ..." && \
-    curl -fsSL -o /tmp/botpack-linux.tar.xz \
-        "https://github.com/VirxEC/pytorch-archive/releases/download/r-1/botpack_x86_64-linux.tar.xz" && \
-    echo "Extracting ..." && \
-    mkdir -p /tmp/botpack-linux && \
-    tar -xJf /tmp/botpack-linux.tar.xz -C /tmp/botpack-linux && \
-    rm -f /tmp/botpack-linux.tar.xz && \
-    echo "PyTorch botpack (Linux) ready"
+# This must be the exact same archive the host extracts into
+# %LOCALAPPDATA%\RLBot5\bots\libtorch\ – the core is linked against these
+# import libraries and loads the matching DLLs from the host's copy at runtime.
+# Docker caches this layer, so identical Dockerfiles share one download.
+RUN echo "Downloading LibTorch CUDA (Windows) ..." && \
+    curl -fsSL -o /tmp/libtorch-win.zip \
+        "https://download.pytorch.org/libtorch/cu126/libtorch-win-shared-with-deps-2.14.0%2Bcu126.zip" && \
+    echo "Extracting headers + import libraries (the DLLs are only needed at runtime, on the host) ..." && \
+    unzip -q /tmp/libtorch-win.zip 'libtorch/include/*' 'libtorch/lib/*.lib' -d /tmp && \
+    mv /tmp/libtorch /tmp/libtorch-win && \
+    rm -f /tmp/libtorch-win.zip && \
+    echo "LibTorch CUDA (Windows) ready"
 
-RUN test -d /tmp/botpack-linux/torch-archive/torch && \
-    test -f /tmp/botpack-linux/torch-archive/torch/share/cmake/Torch/TorchConfig.cmake
-
-# ============================================================
-# Download and extract PyTorch botpack – Windows version (CPU, MSVC)
-# ============================================================
-RUN echo "Downloading PyTorch botpack (Windows) ..." && \
-    curl -fsSL -o /tmp/botpack-win.tar.xz \
-        "https://github.com/VirxEC/pytorch-archive/releases/download/r-1/botpack_x86_64-windows.tar.xz" && \
-    echo "Extracting ..." && \
-    mkdir -p /tmp/botpack-win && \
-    tar -xJf /tmp/botpack-win.tar.xz -C /tmp/botpack-win && \
-    rm -f /tmp/botpack-win.tar.xz && \
-    echo "PyTorch botpack (Windows) ready"
-
-RUN test -d /tmp/botpack-win/torch-archive/torch && \
-    test -f /tmp/botpack-win/torch-archive/torch/share/cmake/Torch/TorchConfig.cmake
+RUN test -f /tmp/libtorch-win/lib/torch_cpu.lib && \
+    test -f /tmp/libtorch-win/lib/torch_cuda.lib && \
+    test -f /tmp/libtorch-win/include/torch/csrc/api/include/torch/torch.h
 
 # ============================================================
 # Copy project into container
@@ -118,15 +108,7 @@ WORKDIR /src
 COPY . /src
 
 # ============================================================
-# Build Linux GGLBot  (native g++)
-# ============================================================
-RUN cmake -S . -B build-linux -G "Unix Makefiles" \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DLIBTORCH_ROOT=/tmp/botpack-linux/torch-archive/torch \
-    && cmake --build build-linux --parallel "$(nproc)"
-
-# ============================================================
-# Build Windows GGLBot  (cross-compiled with Clang + MSVC ABI)
+# Build Windows GGLBot  (cross-compiled with Clang + MSVC ABI, CUDA LibTorch)
 # ============================================================
 # Patch cpp-interface to not pass /Zc:preprocessor (clang-cl rejects it)
 RUN sed -i '/Zc:preprocessor/d' /src/cpp-interface/library/CMakeLists.txt
@@ -134,24 +116,12 @@ RUN sed -i '/Zc:preprocessor/d' /src/cpp-interface/library/CMakeLists.txt
 RUN cmake -S . -B build-win -G "Ninja" \
         -DCMAKE_TOOLCHAIN_FILE=/src/cmake/toolchain-msvc.cmake \
         -DCMAKE_BUILD_TYPE=Release \
-        -DLIBTORCH_ROOT=/tmp/botpack-win/torch-archive/torch \
+        -DLIBTORCH_ROOT=/tmp/libtorch-win \
     && cmake --build build-win --parallel "$(nproc)"
 
 # ============================================================
-# Package everything for bob
+# Package for bob (Windows only)
 # ============================================================
-
-# --- Linux package -------------------------------------------------------
-RUN mkdir -p /out/x86_64-unknown-linux-gnu
-
-# Copy the Linux launcher and Torch-linked core
-RUN mkdir -p /out/x86_64-unknown-linux-gnu/000-runtime
-RUN if [ ! -f /src/build-linux/GGLBot ] || [ ! -f /src/build-linux/GGLBotCore ]; then \
-        echo "ERROR: Expected Linux launcher/core outputs but one is missing."; \
-        exit 1; \
-    fi && \
-    cp /src/build-linux/GGLBot /out/x86_64-unknown-linux-gnu/GGLBot && \
-    cp /src/build-linux/GGLBotCore /out/x86_64-unknown-linux-gnu/000-runtime/GGLBotCore
 
 # --- Windows package -----------------------------------------------------
 RUN mkdir -p /out/x86_64-pc-windows-msvc
@@ -166,11 +136,10 @@ RUN if [ ! -f /src/build-win/GGLBot.exe ] || [ ! -f /src/build-win/GGLBotCore.ex
     cp /src/build-win/GGLBot.exe /out/x86_64-pc-windows-msvc/GGLBot.exe && \
     cp /src/build-win/GGLBotCore.exe /out/x86_64-pc-windows-msvc/000-runtime/GGLBotCore.exe
 
-# Copy any *.lt model files from rlbot into both platform directories
+# Copy any *.lt model files from rlbot next to the launcher
 RUN if [ -d /src/rlbot ]; then \
         shopt -s globstar nullglob; \
         for f in /src/rlbot/**/*.lt; do \
-            cp "$f" /out/x86_64-unknown-linux-gnu/; \
             cp "$f" /out/x86_64-pc-windows-msvc/; \
             echo "Copied $f"; \
         done; \
@@ -180,6 +149,7 @@ RUN if [ -d /src/rlbot ]; then \
 
 # Emit tar to stdout for bob. Sorting places 000-runtime before the launcher,
 # so bob selects the launcher as the platform entry point.
+# Only the Windows build is produced: the tournament runs on Windows, and bob
+# treats the Linux binary as optional (it drops run_command_linux when absent).
 ENTRYPOINT ["tar", "--sort=name", "-C", "/out", "-cf", "-", \
-    "x86_64-unknown-linux-gnu", \
     "x86_64-pc-windows-msvc"]
