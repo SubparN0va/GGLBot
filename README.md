@@ -104,3 +104,12 @@ ctest --test-dir out/build/launcher-tests --output-on-failure
 
 Use an x64 Visual Studio developer prompt on Windows. These checks require Python and CMake, but no LibTorch or GPU. The helper checks can also run with `python tests/test_bob_build.py`.
 
+Runtime regression tests exercise real model inference and synthetic RLBot packets with the selected SDK:
+
+```text
+cmake --preset windows-cpu-relwithdebinfo -DGGLBOT_BUILD_RUNTIME_TESTS=ON
+cmake --build --preset windows-cpu-relwithdebinfo --target GGLBotRuntimeTestsCPU
+ctest --test-dir out/build/windows-cpu-relwithdebinfo --output-on-failure
+```
+
+For GPU, use `windows-cuda-relwithdebinfo` and `GGLBotRuntimeTestsCUDA`; the test requires a working GPU. Linux uses the corresponding CPU preset and target.

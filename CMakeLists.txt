@@ -148,3 +148,8 @@ add_custom_command(TARGET GGLBot POST_BUILD
   VERBATIM
 )
 
+option(GGLBOT_BUILD_RUNTIME_TESTS "Build inference and live-packet regression tests" OFF)
+if(GGLBOT_BUILD_RUNTIME_TESTS)
+  enable_testing()
+  add_subdirectory(tests/runtime)
+endif()
