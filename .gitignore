@@ -3,9 +3,14 @@
 *.lt
 *.exe
 CMakeSettings.json
+CMakeUserPresets.json
 /libtorch
 /bob_build
 /rlbot/000-runtime
 rlbot/logo.png
 /build
 /.idea
+/build-support/libtorch/local/include/
+/build-support/libtorch/local/lib/
+/build-support/libtorch/local/build-version
+__pycache__/

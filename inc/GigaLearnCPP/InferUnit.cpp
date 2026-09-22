@@ -11,25 +11,26 @@ GGL::InferUnit::InferUnit(
 
 	this->models = std::make_unique<ModelSet>();
 
-	try {
-		GGL::Infer::MakeInferenceModels(
-			obsSize,
-			actionParser->GetActionAmount(),
-			sharedHeadConfig,
-			policyConfig,
-			useGPU ? torch::kCUDA : torch::kCPU,
-			*this->models
-		);
-	}
-	catch (std::exception& e) {
-		RG_ERR_CLOSE("InferUnit: Exception when trying to construct models: " << e.what());
-	}
+	// Let startup handle CUDA initialization errors before announcing the selected device.
+	GGL::Infer::MakeInferenceModels(
+		obsSize,
+		actionParser->GetActionAmount(),
+		sharedHeadConfig,
+		policyConfig,
+		useGPU ? torch::kCUDA : torch::kCPU,
+		*this->models
+	);
+	this->models->Load(modelsFolder, false, false); // loadOptims=false already
 
-	try {
-		this->models->Load(modelsFolder, false, false); // loadOptims=false already
-	}
-	catch (std::exception& e) {
-		RG_ERR_CLOSE("InferUnit: Exception when trying to load models: " << e.what());
+	if (useGPU) {
+		// Validate the actual policy and synchronize to report CUDA failures at startup.
+		RG_NO_GRAD;
+		auto options = torch::TensorOptions().device(torch::kCUDA);
+		auto sampleObs = torch::zeros({ 1, obsSize }, options);
+		auto sampleMasks = torch::ones({ 1, actionParser->GetActionAmount() }, options.dtype(torch::kBool));
+		torch::Tensor actions;
+		GGL::Infer::InferActions(*models, sampleObs, sampleMasks, true, 1.0f, false, &actions, nullptr);
+		actions.cpu();
 	}
 }
 

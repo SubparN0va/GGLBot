@@ -2,11 +2,17 @@
 
 #include <rlbot/BotManager.h>
 
+#include <c10/util/Exception.h>
+
+#if GGLBOT_USE_CUDA
 #include <torch/cuda.h>
+#include <torch/torch.h>
+#endif
 
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 
 namespace
 {
@@ -115,6 +121,21 @@ namespace
 
 int main(int argc, char** argv)
 {
+    constexpr bool useGPU = GGLBOT_USE_CUDA != 0;
+#if GGLBOT_USE_CUDA
+    try {
+        if (!torch::cuda::is_available())
+            throw std::runtime_error("CUDA is unavailable; check the NVIDIA GPU, driver, and LibTorch runtime.");
+        // Exercise a CUDA kernel to report unsupported GPU architectures at startup.
+        auto sample = torch::ones({2, 2}, torch::TensorOptions().device(torch::kCUDA));
+        auto result = torch::matmul(sample, sample).cpu();
+    }
+    catch (const std::exception& error) {
+        std::fprintf(stderr, "GGLBot: GPU initialization failed: %s\n", error.what());
+        return EXIT_FAILURE;
+    }
+#endif
+
     auto ctx = std::make_shared<SharedBotContext>();
 
     // ------------------------------------------------------------------------
@@ -180,29 +201,25 @@ int main(int argc, char** argv)
         exeDir = parentDir;
     }
 
-    // GPU inference is mandatory: this core is linked against CUDA LibTorch and the
-    // policy is sized for the GPU. Exit loudly rather than silently degrade to CPU.
-    if (!torch::cuda::is_available()) {
-        std::fprintf(stderr,
-            "GGLBot: CUDA is NOT available - refusing to start.\n"
-            "  Check that an NVIDIA GPU is present, the driver supports the CUDA version LibTorch was built with,\n"
-            "  and that the launcher found the CUDA LibTorch runtime (torch_cuda.dll).\n");
+    try {
+        ctx->inferUnit = std::make_shared<GGL::InferUnit>(
+            ctx->obs.get(),
+            obsSize,
+            ctx->act.get(),
+            sharedHeadCfg,
+            policyCfg,
+            exeDir, // Put model files next to bot.toml
+            useGPU
+        );
+    }
+    catch (const c10::Error& error) {
+        std::fprintf(stderr, "GGLBot: %s initialization failed: %s\n", useGPU ? "GPU" : "CPU", error.what());
         return EXIT_FAILURE;
     }
-    std::printf("GGLBot: CUDA available (%d device%s) -> running inference on GPU\n",
-        (int)torch::cuda::device_count(), torch::cuda::device_count() == 1 ? "" : "s");
-    const bool useGPU = true;
-
-    ctx->inferUnit = std::make_shared<GGL::InferUnit>(
-        ctx->obs.get(),
-        obsSize,
-        ctx->act.get(),
-        sharedHeadCfg,
-        policyCfg,
-        exeDir, // Put model files next to bot.toml
-        useGPU
-    );
-
+    catch (const std::exception& error) {
+        std::fprintf(stderr, "GGLBot: model initialization failed: %s\n", error.what());
+        return EXIT_FAILURE;
+    }
     SetSpawnContext(ctx);
 
     auto const serverHost = []() -> char const* {
@@ -228,7 +245,10 @@ int main(int argc, char** argv)
         agentIdStr = *maybeId;
     }
 
-    RLBotBotManager manager(false);
+    std::printf("%s: using %s\n", agentIdStr.c_str(), useGPU ? "GPU" : "CPU");
+    std::fflush(stdout);
+
+    RLBotBotManager manager;
 
     if (!manager.connect(serverHost, serverPort, agentIdStr.c_str(), useBallPrediction)) {
         return EXIT_FAILURE;

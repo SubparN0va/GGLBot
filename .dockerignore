@@ -11,3 +11,6 @@ rlbot/000-runtime/
 rlbot/*.exe
 *.Dockerfile
 README.md
+libtorch/
+**/*.dll
+**/__pycache__/
