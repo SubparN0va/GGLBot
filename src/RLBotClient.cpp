@@ -1,5 +1,7 @@
 #include "RLBotClient.h"
 
+#include <algorithm>
+
 using namespace RLGC;
 
 namespace
@@ -32,24 +34,30 @@ namespace
         pd.boost = playerInfo->boost();
 
         pd.isOnGround = (playerInfo->air_state() == rlbot::flat::AirState::OnGround);
+        pd.isJumping = (playerInfo->air_state() == rlbot::flat::AirState::Jumping);
+        pd.isFlipping = (playerInfo->air_state() == rlbot::flat::AirState::Dodging);
         pd.hasJumped = playerInfo->has_jumped();
         pd.hasDoubleJumped = playerInfo->has_double_jumped();
         pd.hasFlipped = playerInfo->has_dodged();
         pd.isDemoed = playerInfo->demolished_timeout() >= 0.f;
 
-        // Approximate airtime timers (used for HasFlipOrJump behavior)
+        // Total airtime is separate from the usable jump/flip window.
         if (pd.isOnGround) {
             timing.airTime = 0.f;
-            timing.airTimeSinceJump = 0.f;
         }
         else {
             timing.airTime += dtSec;
-
-            timing.airTimeSinceJump = pd.hasJumped ? timing.airTime : 0.f;
         }
 
         pd.airTime = timing.airTime;
-        pd.airTimeSinceJump = timing.airTimeSinceJump;
+        // The packet window remains accurate after missed callbacks or a held jump.
+        // A negative timeout during jump hold or after a flip reset is not an expired flip.
+        if (playerInfo->dodge_timeout() >= 0.f)
+            pd.airTimeSinceJump = RLConst::DOUBLEJUMP_MAX_DELAY - playerInfo->dodge_timeout();
+        else if (pd.isJumping || !pd.hasJumped || pd.isOnGround)
+            pd.airTimeSinceJump = 0.f;
+        else
+            pd.airTimeSinceJump = RLConst::DOUBLEJUMP_MAX_DELAY;
 
         return pd;
     }
@@ -118,37 +126,62 @@ void RLBotBot::update(rlbot::flat::GamePacket const* packet,
         return;
     }
 
-    float curTime = packet->match_info()->seconds_elapsed();
-    float deltaTime = curTime - prevTime;
+    const float curTime = packet->match_info()->seconds_elapsed();
+    const uint32_t frame = packet->match_info()->frame_num();
+    const uint32_t elapsedFrames = frame - prevFrame;
+    // Unsigned subtraction handles frame-counter wrap. A backwards clock starts a new cycle.
+    if (ticks >= 0 && (curTime < prevTime || elapsedFrames > 0x80000000u)) {
+        ticks = -1;
+        m_botState.clear();
+        m_playerTiming.clear();
+    }
+    const bool firstPacket = ticks < 0;
+    const float deltaTime = firstPacket ? 0.f : std::max(0.f, curTime - prevTime);
     prevTime = curTime;
+    prevFrame = frame;
 
-    int ticksElapsed = roundf(deltaTime * 120);
-    ticks += ticksElapsed;
+    const int tickSkip = std::max(1, ctx_->params.tickSkip);
+    const int actionDelay = std::clamp(ctx_->params.actionDelay, 0, tickSkip);
+    // Use physics frames so duplicate packets and float clock rounding cannot shift decisions.
+    ticks = firstPacket ? 0 : ticks + static_cast<int>(std::min(elapsedFrames, uint32_t(tickSkip - ticks)));
+    const bool inferAction = firstPacket || ticks >= tickSkip;
+    const bool queuedActionDue = !firstPacket && ticks >= actionDelay;
+    if (inferAction)
+        ticks = 0;
 
     GameState gs = ToGameState(packet, deltaTime, m_playerTiming);
-    
-    for (auto const& index : this->indices)
-    {
+
+    // Every tensor row uses the same packet, with all controlled cars prepared first.
+    std::vector<unsigned> activeIndices;
+    for (unsigned index : indices)
+        if (index < gs.players.size())
+            activeIndices.push_back(index);
+    std::sort(activeIndices.begin(), activeIndices.end());
+
+    for (unsigned index : activeIndices) {
         auto& st = m_botState[index];
-        if (!st.initialized) {
-            st.initialized = true;
-
-            st.action = RLGC::Action{};
-            st.controls = RLGC::Action{};
-        }
-
-        auto& localPlayer = gs.players[index];
-        localPlayer.prevAction = st.controls;
-
-        if (updateAction) {
-            st.action = ctx_->inferUnit->InferAction(localPlayer, gs, true);
-        }
-
-        if (ticks >= (ctx_->params.actionDelay) || ticks == -1) {
-            // Apply new action
+        // Apply the previous queued action before inference can replace it after a skipped packet.
+        if (queuedActionDue && st.actionPending) {
             st.controls = st.action;
+            st.actionPending = false;
         }
+        gs.players[index].prevAction = st.obsPrevAction;
+    }
 
+    if (inferAction && !activeIndices.empty()) {
+        const auto actions = ctx_->inferUnit->BatchInferActions(activeIndices, gs, true);
+        for (size_t row = 0; row < activeIndices.size(); ++row) {
+            auto& st = m_botState[activeIndices[row]];
+            st.action = actions[row];
+            st.obsPrevAction = st.action;
+            st.actionPending = actionDelay != 0;
+            if (actionDelay == 0)
+                st.controls = st.action;
+        }
+    }
+
+    for (unsigned index : activeIndices) {
+        const auto& st = m_botState[index];
         const auto& c = st.controls;
         setOutput(index, {
             c.throttle,
@@ -161,15 +194,5 @@ void RLBotBot::update(rlbot::flat::GamePacket const* packet,
             c.handbrake > 0.5f,
             false,
             });
-    }
-
-    if (updateAction) {
-        updateAction = false;
-    }
-
-    if (ticks >= ctx_->params.tickSkip || ticks == -1) {
-        // Trigger action update next tick
-        ticks = 0;
-        updateAction = true;
     }
 }

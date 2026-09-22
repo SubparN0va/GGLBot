@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <rlbot/Bot.h>
 #include <RLGymCPP/ObsBuilders/AdvancedObs.h>
 #include <RLGymCPP/ActionParsers/DefaultAction.h>
@@ -21,26 +22,24 @@ struct SharedBotContext {
 
 struct PlayerTimingState {
     float airTime = 0.f;
-    float airTimeSinceJump = 0.f;
-    bool  lastOnGround = true;
 };
 
 class RLBotBot : public rlbot::Bot {
 public:
     struct PerBotState {
-        bool initialized = false;
-
-        // Queued action and current action
+        /** Queued policy output, held controls, and the last policy action observed. **/
         RLGC::Action
             action = {},
-            controls = {};
+            controls = {},
+            obsPrevAction = {};
+        bool actionPending = false;
     };
     
 
-    // Persistent info
-    bool updateAction = true;
+    /** Physics frames since the last decision; -1 means no packet has arrived. **/
     int ticks = -1;
     float prevTime = 0;
+    uint32_t prevFrame = 0;
 
     RLBotBot() noexcept = delete;
     ~RLBotBot() noexcept override;

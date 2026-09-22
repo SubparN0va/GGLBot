@@ -245,10 +245,10 @@ int main(int argc, char** argv)
         agentIdStr = *maybeId;
     }
 
-    std::printf("%s: using %s\n", agentIdStr.c_str(), useGPU ? "GPU" : "CPU");
+    std::printf("%s: using %s (batch inference enabled)\n", agentIdStr.c_str(), useGPU ? "GPU" : "CPU");
     std::fflush(stdout);
 
-    RLBotBotManager manager;
+    RLBotBotManager manager(true);
 
     if (!manager.connect(serverHost, serverPort, agentIdStr.c_str(), useBallPrediction)) {
         return EXIT_FAILURE;

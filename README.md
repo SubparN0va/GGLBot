@@ -86,6 +86,12 @@ Zip these files and directories:
 
 Exclude `.git/`, `.vs/`, `out/`, `bob_build/`, generated executables, `rlbot/000-runtime/`, and generated `build-support/libtorch/local/`. The host builds with `scripts/build_bob.py` and the selected Windows SDK installed. Test your models with the runtime and hardware you will use.
 
+## Batched inference
+
+`hivemind = true` in `rlbot/bot.toml` lets RLBot group matching teammates into one process. Each decision runs those cars through the model in one CPU or GPU batch, retaining each car's observations, action mask, and delayed controls. A single car uses a batch of one. Set `hivemind = false` for separate processes.
+
+Decisions follow physics-frame counts and `tickSkip` / `actionDelay`. The initial action waits for its configured delay; zero delay applies immediately. Jump/flip availability uses RLBot's reported dodge window, including jump hold and flip resets. Startup prints the `agent_id`, CPU or GPU, and `(batch inference enabled)` after initialization.
+
 ## Checks
 
 The helper and launcher checks cover exclusive device selection, local discovery and overrides, missing SDKs, staging cleanup, cache fingerprints, argument forwarding, and failure handling:
