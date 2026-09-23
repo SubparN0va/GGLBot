@@ -111,8 +111,8 @@ namespace
     class RLBotBotManager final : public rlbot::BotManagerBase
     {
     public:
-        explicit RLBotBotManager(bool batchHivemind = false) noexcept
-            : rlbot::BotManagerBase(batchHivemind, SpawnBot)
+        explicit RLBotBotManager(bool batchInference = false) noexcept
+            : rlbot::BotManagerBase(batchInference, SpawnBot)
         {
         }
     };
@@ -245,7 +245,7 @@ int main(int argc, char** argv)
         agentIdStr = *maybeId;
     }
 
-    std::printf("%s: using %s (batch inference enabled)\n", agentIdStr.c_str(), useGPU ? "GPU" : "CPU");
+    std::printf("%s: using %s (batched inference enabled)\n", agentIdStr.c_str(), useGPU ? "GPU" : "CPU");
     std::fflush(stdout);
 
     RLBotBotManager manager(true);

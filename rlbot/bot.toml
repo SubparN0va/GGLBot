@@ -5,7 +5,8 @@
 agent_id = "GigaLearn/GGLBot"
 # The name that will be displayed in game
 name = "GGLBot"
-# Batch matching teammates in one process; false uses separate processes.
+# Batched inference: evaluate matching teammates together; each car gets its own action.
+# RLBot requires the key name "hivemind"; false uses separate processes.
 hivemind = true
 # Path to loadout config from runner
 loadout_file = "loadout.toml"

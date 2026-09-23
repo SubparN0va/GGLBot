@@ -78,6 +78,6 @@ On Linux, use `linux-cpu-release` or `linux-cpu-relwithdebinfo` with the CPU bot
 
 ### Batched inference
 
-`hivemind = true` in `rlbot/bot.toml` groups matching teammates into one process for batched inference. Each car retains its own observations, action mask, and delayed controls. This lets the model compute actions for all teammates in a single inference call, which can reduce inference overhead. 
+Batched inference evaluates matching teammates together in a single model call to reduce inference overhead. Each car gets its own action from its own observations and action mask, and retains its own delayed controls. Batching itself adds no shared decision-making or team coordination.
 
-Set `hivemind = false` for separate processes.
+Enable batched inference with `hivemind = true` in `rlbot/bot.toml`. `hivemind` is RLBot's required configuration key for grouping matching teammates into one process. Set `hivemind = false` to run each car in a separate process.
