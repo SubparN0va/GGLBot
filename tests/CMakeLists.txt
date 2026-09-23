@@ -7,6 +7,9 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME bob-build-helper COMMAND "${Python3_EXECUTABLE}"
   "${CMAKE_CURRENT_SOURCE_DIR}/test_bob_build.py")
 
+add_test(NAME submission-package COMMAND "${Python3_EXECUTABLE}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/test_package_bot.py")
+
 foreach(device CPU CUDA)
   if(device STREQUAL "CUDA" AND NOT WIN32)
     continue()

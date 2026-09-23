@@ -14,3 +14,4 @@ README.md
 libtorch/
 **/*.dll
 **/__pycache__/
+submission.zip

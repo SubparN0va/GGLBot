@@ -14,3 +14,4 @@ rlbot/logo.png
 /build-support/libtorch/local/lib/
 /build-support/libtorch/local/build-version
 __pycache__/
+/submission.zip
