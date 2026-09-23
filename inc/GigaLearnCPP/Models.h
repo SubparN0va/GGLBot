@@ -152,12 +152,8 @@ namespace GGL {
 
 			auto sizesBefore = GetSeqParamNumels(seq);
 
-			try {
-				torch::load(seq, in, device);
-			}
-			catch (const std::exception& e) {
-				RG_ERR_CLOSE("Failed to load model \"" << modelName << "\" from " << path << "\nException: " << e.what());
-			}
+			// NOTE: Preserve the Torch exception so startup can report the initialization failure.
+			torch::load(seq, in, device);
 
 			auto sizesAfter = GetSeqParamNumels(seq);
 			if (sizesBefore != sizesAfter) {

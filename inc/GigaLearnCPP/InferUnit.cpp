@@ -3,6 +3,8 @@
 #include <GigaLearnCPP/Models.h>
 #include <GigaLearnCPP/InferenceModels.h>
 
+#include <stdexcept>
+
 GGL::InferUnit::InferUnit(
 	RLGC::ObsBuilder* obsBuilder, int obsSize, RLGC::ActionParser* actionParser,
 	InferPartialModelConfig sharedHeadConfig, InferPartialModelConfig policyConfig,
@@ -11,25 +13,26 @@ GGL::InferUnit::InferUnit(
 
 	this->models = std::make_unique<ModelSet>();
 
-	try {
-		GGL::Infer::MakeInferenceModels(
-			obsSize,
-			actionParser->GetActionAmount(),
-			sharedHeadConfig,
-			policyConfig,
-			useGPU ? torch::kCUDA : torch::kCPU,
-			*this->models
-		);
-	}
-	catch (std::exception& e) {
-		RG_ERR_CLOSE("InferUnit: Exception when trying to construct models: " << e.what());
-	}
+	// Let startup handle CUDA initialization errors before announcing the selected device.
+	GGL::Infer::MakeInferenceModels(
+		obsSize,
+		actionParser->GetActionAmount(),
+		sharedHeadConfig,
+		policyConfig,
+		useGPU ? torch::kCUDA : torch::kCPU,
+		*this->models
+	);
+	this->models->Load(modelsFolder, false, false); // loadOptims=false already
 
-	try {
-		this->models->Load(modelsFolder, false, false); // loadOptims=false already
-	}
-	catch (std::exception& e) {
-		RG_ERR_CLOSE("InferUnit: Exception when trying to load models: " << e.what());
+	if (useGPU) {
+		// Validate the actual policy and synchronize to report CUDA failures at startup.
+		RG_NO_GRAD;
+		auto options = torch::TensorOptions().device(torch::kCUDA);
+		auto sampleObs = torch::zeros({ 1, obsSize }, options);
+		auto sampleMasks = torch::ones({ 1, actionParser->GetActionAmount() }, options.dtype(torch::kBool));
+		torch::Tensor actions;
+		GGL::Infer::InferActions(*models, sampleObs, sampleMasks, true, 1.0f, false, &actions, nullptr);
+		actions.cpu();
 	}
 }
 
@@ -39,7 +42,7 @@ RLGC::Action GGL::InferUnit::InferAction(
 	bool deterministic,
 	float temperature
 ) {
-	return BatchInferActions({ player }, { state }, deterministic, temperature)[0];
+	return InferBatch({ &player }, { &state }, deterministic, temperature)[0];
 }
 
 std::vector<RLGC::Action> GGL::InferUnit::BatchInferActions(
@@ -48,27 +51,62 @@ std::vector<RLGC::Action> GGL::InferUnit::BatchInferActions(
 	bool deterministic,
 	float temperature
 ) {
-	RG_ASSERT(players.size() > 0 && states.size() > 0);
 	RG_ASSERT(players.size() == states.size());
+	std::vector<const RLGC::Player*> playerRefs;
+	std::vector<const RLGC::GameState*> stateRefs;
+	for (size_t i = 0; i < players.size(); ++i) {
+		playerRefs.push_back(&players[i]);
+		stateRefs.push_back(&states[i]);
+	}
+	return InferBatch(playerRefs, stateRefs, deterministic, temperature);
+}
+
+std::vector<RLGC::Action> GGL::InferUnit::BatchInferActions(
+	const std::vector<unsigned>& indices,
+	const RLGC::GameState& state,
+	bool deterministic,
+	float temperature
+) {
+	std::vector<const RLGC::Player*> playerRefs;
+	playerRefs.reserve(indices.size());
+	for (unsigned index : indices) {
+		if (index >= state.players.size())
+			throw std::out_of_range("InferUnit: batch player index is outside the game state");
+		playerRefs.push_back(&state.players[index]);
+	}
+	return InferBatch(playerRefs, std::vector<const RLGC::GameState*>(indices.size(), &state), deterministic, temperature);
+}
+
+std::vector<RLGC::Action> GGL::InferUnit::InferBatch(
+	const std::vector<const RLGC::Player*>& players,
+	const std::vector<const RLGC::GameState*>& states,
+	bool deterministic,
+	float temperature
+) {
+	if (players.empty())
+		return {};
 
 	int batchSize = (int)players.size();
 	std::vector<float> allObs;
 	std::vector<uint8_t> allActionMasks;
+	allObs.reserve(players.size() * obsSize);
+	allActionMasks.reserve(players.size() * actionParser->GetActionAmount());
 
 	for (int i = 0; i < batchSize; i++) {
-		FList curObs = obsBuilder->BuildObs(players[i], states[i]);
+		FList curObs = obsBuilder->BuildObs(*players[i], *states[i]);
 		if ((int)curObs.size() != obsSize) {
 			RG_ERR_CLOSE(
 				"InferUnit: Obs builder produced an obs that differs from the provided size (expected: " << obsSize << ", got: " << curObs.size() << ")\n"
 				"Make sure you provided the correct obs size to the InferUnit constructor.\n"
-				"Also, make sure there aren't an incorrect number of players (there are " << states[i].players.size() << " in this state)"
+				"Also, make sure there aren't an incorrect number of players (there are " << states[i]->players.size() << " in this state)"
 			);
 		}
 		allObs += curObs;
-		allActionMasks += actionParser->GetActionMask(players[i], states[i]);
+		allActionMasks += actionParser->GetActionMask(*players[i], *states[i]);
 	}
 
 	std::vector<RLGC::Action> results;
+	results.reserve(players.size());
 
 	try {
 		RG_NO_GRAD;
@@ -94,7 +132,7 @@ std::vector<RLGC::Action> GGL::InferUnit::BatchInferActions(
 		auto actionIndices = TENSOR_TO_VEC<int>(tActions);
 
 		for (int i = 0; i < batchSize; i++)
-			results.push_back(actionParser->ParseAction(actionIndices[i], players[i], states[i]));
+			results.push_back(actionParser->ParseAction(actionIndices[i], *players[i], *states[i]));
 
 	}
 	catch (std::exception& e) {

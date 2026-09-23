@@ -21,27 +21,29 @@ namespace
 {
     constexpr int TORCH_SEARCH_DEPTH = 5;
 
-#ifdef _WIN32
-    constexpr wchar_t TORCH_MARKER[] = L"torch_cpu.dll";
-#else
-    constexpr char TORCH_MARKER[] = "libtorch_cpu.so";
-#endif
-
-    bool IsTorchLibDirectory(const std::filesystem::path& directory)
+    std::optional<std::filesystem::path> FindTorchLibUnder(const std::filesystem::path& root, bool useCUDA)
     {
+        const auto candidate = useCUDA
+            ? root / "libtorch" / "lib"
+            : root / "torch-archive" / "torch" / "lib";
+#ifdef _WIN32
+        const char* marker = useCUDA ? "torch_cuda.dll" : "torch_cpu.dll";
+#else
+        const char* marker = "libtorch_cpu.so";
+#endif
         std::error_code error;
-        return std::filesystem::is_regular_file(directory / TORCH_MARKER, error);
+        return std::filesystem::is_regular_file(candidate / marker, error)
+            ? std::optional<std::filesystem::path>(candidate) : std::nullopt;
     }
 
     std::optional<std::filesystem::path> FindNearbyTorchLib(
-        const std::filesystem::path& launcherDirectory)
+        const std::filesystem::path& launcherDirectory, bool useCUDA)
     {
         auto directory = launcherDirectory;
         for (int level = 0; level < TORCH_SEARCH_DEPTH; ++level)
         {
-            auto candidate = directory / "torch-archive" / "torch" / "lib";
-            if (IsTorchLibDirectory(candidate))
-                return candidate;
+            if (auto found = FindTorchLibUnder(directory, useCUDA))
+                return found;
 
             auto parent = directory.parent_path();
             if (parent == directory)
@@ -68,17 +70,13 @@ namespace
         return value;
     }
 
-    std::optional<std::filesystem::path> FindDefaultTorchLib()
+    std::optional<std::filesystem::path> FindDefaultTorchLib(bool useCUDA)
     {
         auto localAppData = GetEnvironmentVariableValue(L"LOCALAPPDATA");
         if (!localAppData)
             return std::nullopt;
 
-        auto candidate = std::filesystem::path(*localAppData)
-            / "RLBot5" / "bots" / "torch-archive" / "torch" / "lib";
-        return IsTorchLibDirectory(candidate)
-            ? std::optional<std::filesystem::path>(std::move(candidate))
-            : std::nullopt;
+        return FindTorchLibUnder(std::filesystem::path(*localAppData) / "RLBot5" / "bots", useCUDA);
     }
 
     std::optional<std::filesystem::path> GetLauncherPath()
@@ -193,14 +191,14 @@ namespace
                 mutableCommandLine.data(),
                 nullptr,
                 nullptr,
-                FALSE,
+                TRUE,
                 CREATE_SUSPENDED,
                 nullptr,
                 launcherPath.parent_path().c_str(),
                 &startupInfo,
                 &processInfo))
         {
-            PrintWindowsError(L"starting GGLBotCore.exe");
+            PrintWindowsError(L"starting the bot core");
             return EXIT_FAILURE;
         }
 
@@ -224,7 +222,7 @@ namespace
 
         if (ResumeThread(processInfo.hThread) == static_cast<DWORD>(-1))
         {
-            PrintWindowsError(L"resuming GGLBotCore.exe");
+            PrintWindowsError(L"resuming the bot core");
             TerminateProcess(processInfo.hProcess, EXIT_FAILURE);
             CloseHandle(processInfo.hThread);
             CloseHandle(processInfo.hProcess);
@@ -245,7 +243,7 @@ namespace
         return static_cast<int>(exitCode);
     }
 #else
-    std::optional<std::filesystem::path> FindDefaultTorchLib()
+    std::optional<std::filesystem::path> FindDefaultTorchLib(bool useCUDA)
     {
         std::filesystem::path dataHome;
         if (const char* xdgDataHome = std::getenv("XDG_DATA_HOME"); xdgDataHome && *xdgDataHome)
@@ -261,10 +259,7 @@ namespace
             return std::nullopt;
         }
 
-        auto candidate = dataHome / "RLBot5" / "bots" / "torch-archive" / "torch" / "lib";
-        return IsTorchLibDirectory(candidate)
-            ? std::optional<std::filesystem::path>(std::move(candidate))
-            : std::nullopt;
+        return FindTorchLibUnder(dataHome / "RLBot5" / "bots", useCUDA);
     }
 
     std::optional<std::filesystem::path> GetLauncherPath(const char* argumentZero)
@@ -314,46 +309,67 @@ namespace
 int main(int argc, char** argv)
 {
 #ifdef _WIN32
+    // Missing CUDA dependencies must return an error instead of opening a loader dialog.
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
     auto launcherPath = GetLauncherPath();
 #else
     auto launcherPath = GetLauncherPath(argc > 0 ? argv[0] : nullptr);
 #endif
-    if (!launcherPath)
-    {
+    if (!launcherPath) {
         std::cerr << "GGLBot launcher: could not determine the launcher path.\n";
         return EXIT_FAILURE;
     }
 
     const auto launcherDirectory = launcherPath->parent_path();
+    constexpr bool useCUDA = GGLBOT_USE_CUDA != 0;
+    constexpr const char* device = useCUDA ? "GPU" : "CPU";
+    constexpr const char* overrideName = useCUDA ? "LIBTORCH_CUDA_ROOT" : "LIBTORCH_CPU_ROOT";
 #ifdef _WIN32
-    const auto corePath = launcherDirectory / "000-runtime" / "GGLBotCore.exe";
+    const auto corePath = launcherDirectory / "000-runtime" /
+        (useCUDA ? "GGLBotCoreCUDA.exe" : "GGLBotCoreCPU.exe");
 #else
-    const auto corePath = launcherDirectory / "000-runtime" / "GGLBotCore";
+    const auto corePath = launcherDirectory / "000-runtime" / "GGLBotCoreCPU";
 #endif
-
     std::error_code error;
-    if (!std::filesystem::is_regular_file(corePath, error))
-    {
-        std::cerr << "GGLBot launcher: core executable not found at " << corePath << '\n';
+    if (!std::filesystem::is_regular_file(corePath, error)) {
+        std::cerr << "GGLBot launcher: " << device << " core executable not found at " << corePath << '\n';
         return EXIT_FAILURE;
     }
 
-    auto torchLib = FindNearbyTorchLib(launcherDirectory);
-    if (!torchLib)
-        torchLib = FindDefaultTorchLib();
-    if (!torchLib)
-    {
-        std::cerr << "GGLBot launcher: could not find the RLBot torch-archive runtime.\n";
+    std::optional<std::filesystem::path> runtime;
+#ifdef _WIN32
+    const auto overrideRoot = GetEnvironmentVariableValue(useCUDA ? L"LIBTORCH_CUDA_ROOT" : L"LIBTORCH_CPU_ROOT");
+    if (overrideRoot && !overrideRoot->empty())
+        runtime = std::filesystem::absolute(std::filesystem::path(*overrideRoot) / "lib");
+#else
+    if (const char* overrideRoot = std::getenv(overrideName); overrideRoot && *overrideRoot)
+        runtime = std::filesystem::absolute(std::filesystem::path(overrideRoot) / "lib");
+#endif
+    if (!runtime) {
+        runtime = FindNearbyTorchLib(launcherDirectory, useCUDA);
+        if (!runtime)
+            runtime = FindDefaultTorchLib(useCUDA);
+    }
+#ifdef _WIN32
+    const char* marker = useCUDA ? "torch_cuda.dll" : "torch_cpu.dll";
+#else
+    const char* marker = "libtorch_cpu.so";
+#endif
+    if (!runtime || !std::filesystem::is_regular_file(*runtime / marker, error)) {
+        std::cerr << "GGLBot launcher: could not find the " << device
+                  << " LibTorch runtime. Install it in the bot pack or set " << overrideName << ".\n";
         return EXIT_FAILURE;
     }
-    if (!PrependTorchToPath(*torchLib))
-    {
+    if (!PrependTorchToPath(*runtime)) {
         std::cerr << "GGLBot launcher: could not configure the Torch library path.\n";
         return EXIT_FAILURE;
     }
-
 #ifdef _WIN32
-    return LaunchCore(*launcherPath, corePath);
+    const int result = LaunchCore(*launcherPath, corePath);
+    const auto status = static_cast<DWORD>(result);
+    if (status == 0xC0000135UL || status == 0xC0000139UL || status == 0xC000007BUL || status == 0xC0000142UL)
+        std::cerr << "GGLBot: failed to load the " << device << " runtime. Check its DLLs and version.\n";
+    return result;
 #else
     return LaunchCore(corePath, argc, argv);
 #endif

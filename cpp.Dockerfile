@@ -81,105 +81,54 @@ RUN xwin --accept-license splat --output /tmp/xwin && \
     echo "=== xwin lib files ===" && \
     find /tmp/xwin -name "*.lib" | head -20
 
-# ============================================================
-# Download and extract PyTorch botpack – Linux version (CPU)
-# ============================================================
-RUN echo "Downloading PyTorch botpack (Linux) ..." && \
-    curl -fsSL -o /tmp/botpack-linux.tar.xz \
-        "https://github.com/VirxEC/pytorch-archive/releases/download/r-1/botpack_x86_64-linux.tar.xz" && \
-    echo "Extracting ..." && \
-    mkdir -p /tmp/botpack-linux && \
-    tar -xJf /tmp/botpack-linux.tar.xz -C /tmp/botpack-linux && \
-    rm -f /tmp/botpack-linux.tar.xz && \
-    echo "PyTorch botpack (Linux) ready"
+# Stage only the selected Windows SDK; the helper supplies headers and import libraries.
+COPY build-support/libtorch/ /tmp/libtorch-win/
+COPY cmake/ReadDevice.cmake /tmp/ReadDevice.cmake
+COPY rlbot/device.txt /tmp/gglbot-device.txt
+RUN cmake -DDEVICE_FILE=/tmp/gglbot-device.txt -DOUTPUT_FILE=/tmp/gglbot-device \
+        -P /tmp/ReadDevice.cmake && \
+    test -f /tmp/libtorch-win/local/lib/torch.lib
 
-RUN test -d /tmp/botpack-linux/torch-archive/torch && \
-    test -f /tmp/botpack-linux/torch-archive/torch/share/cmake/Torch/TorchConfig.cmake
+# Linux CPU needs its platform's bot-pack archive. CUDA builds never fetch CPU archives.
+ARG LIBTORCH_LINUX_CPU_URL=https://github.com/VirxEC/pytorch-archive/releases/download/r-1/botpack_x86_64-linux.tar.xz
+RUN if [ "$(cat /tmp/gglbot-device)" = cpu ]; then \
+        curl -fsSL -o /tmp/botpack-linux.tar.xz "$LIBTORCH_LINUX_CPU_URL" && \
+        mkdir -p /tmp/botpack-linux && \
+        tar -xJf /tmp/botpack-linux.tar.xz -C /tmp/botpack-linux && \
+        rm -f /tmp/botpack-linux.tar.xz; \
+    fi
 
-# ============================================================
-# Download and extract PyTorch botpack – Windows version (CPU, MSVC)
-# ============================================================
-RUN echo "Downloading PyTorch botpack (Windows) ..." && \
-    curl -fsSL -o /tmp/botpack-win.tar.xz \
-        "https://github.com/VirxEC/pytorch-archive/releases/download/r-1/botpack_x86_64-windows.tar.xz" && \
-    echo "Extracting ..." && \
-    mkdir -p /tmp/botpack-win && \
-    tar -xJf /tmp/botpack-win.tar.xz -C /tmp/botpack-win && \
-    rm -f /tmp/botpack-win.tar.xz && \
-    echo "PyTorch botpack (Windows) ready"
-
-RUN test -d /tmp/botpack-win/torch-archive/torch && \
-    test -f /tmp/botpack-win/torch-archive/torch/share/cmake/Torch/TorchConfig.cmake
-
-# ============================================================
-# Copy project into container
-# ============================================================
 WORKDIR /src
 COPY . /src
 
-# ============================================================
-# Build Linux GGLBot  (native g++)
-# ============================================================
-RUN cmake -S . -B build-linux -G "Unix Makefiles" \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DLIBTORCH_ROOT=/tmp/botpack-linux/torch-archive/torch \
-    && cmake --build build-linux --parallel "$(nproc)"
-
-# ============================================================
-# Build Windows GGLBot  (cross-compiled with Clang + MSVC ABI)
-# ============================================================
-# Patch cpp-interface to not pass /Zc:preprocessor (clang-cl rejects it)
-RUN sed -i '/Zc:preprocessor/d' /src/cpp-interface/library/CMakeLists.txt
-
-RUN cmake -S . -B build-win -G "Ninja" \
-        -DCMAKE_TOOLCHAIN_FILE=/src/cmake/toolchain-msvc.cmake \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DLIBTORCH_ROOT=/tmp/botpack-win/torch-archive/torch \
-    && cmake --build build-win --parallel "$(nproc)"
-
-# ============================================================
-# Package everything for bob
-# ============================================================
-
-# --- Linux package -------------------------------------------------------
-RUN mkdir -p /out/x86_64-unknown-linux-gnu
-
-# Copy the Linux launcher and Torch-linked core
-RUN mkdir -p /out/x86_64-unknown-linux-gnu/000-runtime
-RUN if [ ! -f /src/build-linux/GGLBot ] || [ ! -f /src/build-linux/GGLBotCore ]; then \
-        echo "ERROR: Expected Linux launcher/core outputs but one is missing."; \
-        exit 1; \
-    fi && \
-    cp /src/build-linux/GGLBot /out/x86_64-unknown-linux-gnu/GGLBot && \
-    cp /src/build-linux/GGLBotCore /out/x86_64-unknown-linux-gnu/000-runtime/GGLBotCore
-
-# --- Windows package -----------------------------------------------------
-RUN mkdir -p /out/x86_64-pc-windows-msvc
-
-# Copy the Windows launcher and Torch-linked core
-RUN mkdir -p /out/x86_64-pc-windows-msvc/000-runtime
-RUN if [ ! -f /src/build-win/GGLBot.exe ] || [ ! -f /src/build-win/GGLBotCore.exe ]; then \
-        echo "ERROR: Expected Windows launcher/core outputs but one is missing."; \
-        find /src/build-win -name "GGLBot*" -type f 2>/dev/null || true; \
-        exit 1; \
-    fi && \
-    cp /src/build-win/GGLBot.exe /out/x86_64-pc-windows-msvc/GGLBot.exe && \
-    cp /src/build-win/GGLBotCore.exe /out/x86_64-pc-windows-msvc/000-runtime/GGLBotCore.exe
-
-# Copy any *.lt model files from rlbot into both platform directories
-RUN if [ -d /src/rlbot ]; then \
-        shopt -s globstar nullglob; \
-        for f in /src/rlbot/**/*.lt; do \
-            cp "$f" /out/x86_64-unknown-linux-gnu/; \
-            cp "$f" /out/x86_64-pc-windows-msvc/; \
-            echo "Copied $f"; \
-        done; \
-    else \
-        echo "No rlbot folder found at /src/rlbot"; \
+RUN if [ "$(cat /tmp/gglbot-device)" = cpu ]; then \
+        cmake -S . -B build-linux -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DGGLBOT_DEVICE=cpu \
+            -DLIBTORCH_CPU_ROOT=/tmp/botpack-linux/torch-archive/torch && \
+        cmake --build build-linux --target GGLBot --parallel "$(nproc)" && \
+        mkdir -p /out/x86_64-unknown-linux-gnu/000-runtime && \
+        cp build-linux/GGLBot /out/x86_64-unknown-linux-gnu/ && \
+        cp build-linux/GGLBotCoreCPU /out/x86_64-unknown-linux-gnu/000-runtime/; \
     fi
 
-# Emit tar to stdout for bob. Sorting places 000-runtime before the launcher,
-# so bob selects the launcher as the platform entry point.
-ENTRYPOINT ["tar", "--sort=name", "-C", "/out", "-cf", "-", \
-    "x86_64-unknown-linux-gnu", \
-    "x86_64-pc-windows-msvc"]
+RUN sed -i '/Zc:preprocessor/d' /src/cpp-interface/library/CMakeLists.txt
+RUN device="$(cat /tmp/gglbot-device)" && \
+    if [ "$device" = gpu ]; then root=LIBTORCH_CUDA_ROOT; core=GGLBotCoreCUDA; \
+    else root=LIBTORCH_CPU_ROOT; core=GGLBotCoreCPU; fi && \
+    cmake -S . -B build-win -G Ninja \
+        -DCMAKE_TOOLCHAIN_FILE=/src/cmake/toolchain-msvc.cmake \
+        -DCMAKE_BUILD_TYPE=Release -DGGLBOT_DEVICE="$device" \
+        -D"$root"=/tmp/libtorch-win/local && \
+    cmake --build build-win --target GGLBot --parallel "$(nproc)" && \
+    mkdir -p /out/x86_64-pc-windows-msvc/000-runtime && \
+    cp build-win/GGLBot.exe /out/x86_64-pc-windows-msvc/ && \
+    cp "build-win/$core.exe" /out/x86_64-pc-windows-msvc/000-runtime/
+
+RUN shopt -s globstar nullglob; \
+    for platform in /out/*; do \
+        for model in /src/rlbot/**/*.lt; do cp "$model" "$platform/"; done; \
+    done
+
+# Sorting puts the core before the launcher, which bob uses as the entry point.
+# Export only platforms produced by this build.
+ENTRYPOINT ["tar", "--sort=name", "-C", "/out", "-cf", "-", "."]

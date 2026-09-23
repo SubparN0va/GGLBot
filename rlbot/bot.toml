@@ -5,10 +5,13 @@
 agent_id = "GigaLearn/GGLBot"
 # The name that will be displayed in game
 name = "GGLBot"
+# Batch matching teammates in one process; false uses separate processes.
+hivemind = true
 # Path to loadout config from runner
 loadout_file = "loadout.toml"
 # The native launcher resolves the shared LibTorch runtime before starting the bot core
 # The command RLBot will call to start your bot on Windows
+# Select cpu or gpu (default) in device.txt before building.
 run_command = "GGLBot.exe"
 # The command RLBot will call to start your bot on Linux
 run_command_linux = "./GGLBot"
