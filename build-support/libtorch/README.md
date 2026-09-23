@@ -1,6 +1,6 @@
 This directory supplies Docker with the selected local Windows LibTorch SDK.
 
-`scripts/build_bob.py` reads `rlbot/device.txt` (`cpu` or `cuda`) and temporarily
+`scripts/build_bob.py` reads `rlbot/device.txt` (`cpu` or `gpu`, default `gpu`) and temporarily
 creates `local/` containing headers, required import libraries, and version
 metadata. CPU uses `torch-archive/torch`; CUDA uses `libtorch`. The helper never
 copies runtime DLLs and removes `local/` after bob exits. Run the helper for

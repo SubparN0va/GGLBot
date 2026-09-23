@@ -62,7 +62,7 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(self.trace(), [DEVICE])
 
     def test_selection_is_baked_into_launcher(self):
-        (self.bot / 'device.txt').write_text('cpu' if CUDA else 'cuda')
+        (self.bot / 'device.txt').write_text('cpu' if CUDA else 'gpu')
         self.assert_success(self.run_bot())
         self.assertEqual(self.trace(), [DEVICE])
 

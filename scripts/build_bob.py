@@ -1,4 +1,4 @@
-"""Build CPU or CUDA packages with bob using the selected local Windows LibTorch SDK."""
+"""Build CPU or GPU packages with bob using the selected local Windows LibTorch SDK."""
 from __future__ import annotations
 
 import argparse
@@ -30,16 +30,16 @@ CUDA_HEADERS = (
 def read_device(project: Path) -> str:
     path = project / "rlbot/device.txt"
     mode = path.read_text(encoding="utf-8").strip() if path.exists() else ""
-    if mode not in ("cpu", "cuda"):
-        raise ValueError("rlbot/device.txt must contain cpu or cuda before building.")
+    if mode not in ("cpu", "gpu"):
+        raise ValueError("rlbot/device.txt must contain cpu or gpu before building.")
     return mode
 
 
 def sdk_version(root: Path, mode: str) -> str:
     """Check the selected Windows SDK without requiring the other device's archive."""
-    libraries = CUDA_LIBRARIES if mode == "cuda" else CPU_LIBRARIES
-    required = list(CUDA_HEADERS if mode == "cuda" else CPU_HEADERS)
-    if mode == "cuda":
+    libraries = CUDA_LIBRARIES if mode == "gpu" else CPU_LIBRARIES
+    required = list(CUDA_HEADERS if mode == "gpu" else CPU_HEADERS)
+    if mode == "gpu":
         required.append(Path("build-version"))
     for name in libraries:
         required.extend((Path("lib") / (name + ".lib"), Path("lib") / (name + ".dll")))
@@ -67,13 +67,13 @@ def sdk_version(root: Path, mode: str) -> str:
 
 def sdk_candidates(project: Path, mode: str, explicit: Path | None, env: dict[str, str]):
     # Explicit overrides are exclusive: do not accidentally build against another SDK.
-    override = explicit or env.get("LIBTORCH_CUDA_ROOT" if mode == "cuda" else "LIBTORCH_CPU_ROOT")
+    override = explicit or env.get("LIBTORCH_CUDA_ROOT" if mode == "gpu" else "LIBTORCH_CPU_ROOT")
     if override:
         yield Path(override).expanduser()
         return
 
     # Match the launcher's nearby-bot search, followed by the standard bot-pack location.
-    subdir = "libtorch" if mode == "cuda" else "torch-archive/torch"
+    subdir = "libtorch" if mode == "gpu" else "torch-archive/torch"
     directory = project / "rlbot"
     for _ in range(5):
         yield directory / subdir
@@ -113,7 +113,7 @@ def staged_sdk(project: Path, mode: str, sdk):
         source, version = sdk
         shutil.copytree(source / "include", stage / "include")
         (stage / "lib").mkdir()
-        libraries = CUDA_LIBRARIES if mode == "cuda" else CPU_LIBRARIES
+        libraries = CUDA_LIBRARIES if mode == "gpu" else CPU_LIBRARIES
         for name in libraries:
             shutil.copy2(source / "lib" / (name + ".lib"), stage / "lib" / (name + ".lib"))
         (stage / "build-version").write_text(version + "\n", encoding="utf-8")
@@ -151,7 +151,7 @@ def main(argv=None) -> int:
         if not executable:
             raise ValueError("bob was not found. Supply its executable with --bob.")
         with staged_sdk(project, mode, sdk):
-            platforms = "Windows GPU" if mode == "cuda" else "Windows + Linux CPU"
+            platforms = "Windows GPU" if mode == "gpu" else "Windows + Linux CPU"
             print(f"bob: {platforms} (Windows LibTorch {sdk[1]})", flush=True)
             return subprocess.run([executable, "build", "bob.toml", "--out-dir", args.out_dir],
                                   cwd=project, check=False).returncode

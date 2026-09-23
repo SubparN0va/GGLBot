@@ -26,11 +26,11 @@ class BobBuildTests(unittest.TestCase):
         self.device = self.project / 'rlbot/device.txt'
         self.env = {'LOCALAPPDATA': str(self.root / 'app data')}
         pack = Path(self.env['LOCALAPPDATA']) / 'RLBot5/bots'
-        self.standard = {'cpu': pack / 'torch-archive/torch', 'cuda': pack / 'libtorch'}
+        self.standard = {'cpu': pack / 'torch-archive/torch', 'gpu': pack / 'libtorch'}
 
-    def make_sdk(self, mode='cuda', root=None):
+    def make_sdk(self, mode='gpu', root=None):
         root = root or self.standard[mode]
-        headers = build_bob.CUDA_HEADERS if mode == 'cuda' else build_bob.CPU_HEADERS
+        headers = build_bob.CUDA_HEADERS if mode == 'gpu' else build_bob.CPU_HEADERS
         for relative in headers:
             path = root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -38,35 +38,35 @@ class BobBuildTests(unittest.TestCase):
         (root / build_bob.VERSION_HEADER).write_text(
             '#define TORCH_VERSION_MAJOR 2\n#define TORCH_VERSION_MINOR 14\n'
             '#define TORCH_VERSION_PATCH 0\n', encoding='utf-8')
-        if mode == 'cuda':
+        if mode == 'gpu':
             (root / 'build-version').write_text('2.14.0+cu126\n', encoding='utf-8')
         (root / 'lib').mkdir()
-        libraries = build_bob.CUDA_LIBRARIES if mode == 'cuda' else build_bob.CPU_LIBRARIES
+        libraries = build_bob.CUDA_LIBRARIES if mode == 'gpu' else build_bob.CPU_LIBRARIES
         for name in libraries:
             for suffix in ('.lib', '.dll'):
                 (root / 'lib' / (name + suffix)).write_bytes(b'fixture')
         (root / 'lib/unused.lib').write_bytes(b'unneeded static library')
         return root
 
-    def select(self, mode='cuda', explicit=None):
+    def select(self, mode='gpu', explicit=None):
         return build_bob.find_sdk(self.project, mode, explicit, self.env)
 
     def test_each_device_requires_its_own_sdk(self):
-        for mode in ('cpu', 'cuda'):
+        for mode in ('cpu', 'gpu'):
             with self.assertRaisesRegex(ValueError, 'require a complete'):
                 self.select(mode)
         self.make_sdk('cpu')
         self.assertEqual(self.select('cpu'), (self.standard['cpu'], '2.14.0+cpu'))
         with self.assertRaises(ValueError):
-            self.select('cuda')
+            self.select('gpu')
 
     def test_cuda_needs_no_cpu_sdk(self):
         self.make_sdk()
-        self.assertEqual(self.select(), (self.standard['cuda'], '2.14.0+cu126'))
+        self.assertEqual(self.select(), (self.standard['gpu'], '2.14.0+cu126'))
         self.assertFalse(self.standard['cpu'].exists())
 
     def test_nearby_discovery_for_both_modes(self):
-        for mode, subdir in [('cpu', 'torch-archive/torch'), ('cuda', 'libtorch')]:
+        for mode, subdir in [('cpu', 'torch-archive/torch'), ('gpu', 'libtorch')]:
             self.make_sdk(mode)
             nearby = self.make_sdk(mode, self.project.parent / subdir)
             self.assertEqual(self.select(mode)[0], nearby)
@@ -74,11 +74,11 @@ class BobBuildTests(unittest.TestCase):
             self.assertEqual(self.select(mode)[0], self.standard[mode])
 
     def test_overrides_are_exclusive_and_device_specific(self):
-        for mode in ('cpu', 'cuda'):
+        for mode in ('cpu', 'gpu'):
             self.make_sdk(mode)
             with self.assertRaises(ValueError):
                 self.select(mode, explicit=self.root / 'missing')
-            self.env['LIBTORCH_' + mode.upper() + '_ROOT'] = str(self.root / 'missing')
+            self.env['LIBTORCH_CUDA_ROOT' if mode == 'gpu' else 'LIBTORCH_CPU_ROOT'] = str(self.root / 'missing')
             with self.assertRaises(ValueError):
                 self.select(mode)
             self.assertEqual(self.select(mode, explicit=self.standard[mode])[0], self.standard[mode])
@@ -99,11 +99,11 @@ class BobBuildTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'CPU builds require CPU LibTorch'):
             self.select('cpu', root)
 
-    def test_build_selection_requires_cpu_or_cuda(self):
-        for mode in ('cpu', 'cuda'):
+    def test_build_selection_requires_cpu_or_gpu(self):
+        for mode in ('cpu', 'gpu'):
             self.device.write_bytes((' \r\n' + mode + '\r\n').encode())
             self.assertEqual(build_bob.read_device(self.project), mode)
-        for mode in ('', 'auto', 'gpu', 'auto cpu'):
+        for mode in ('', 'auto', 'cuda', 'auto cpu'):
             self.device.write_text(mode, encoding='utf-8')
             with self.assertRaises(ValueError):
                 build_bob.read_device(self.project)
@@ -112,9 +112,9 @@ class BobBuildTests(unittest.TestCase):
             build_bob.read_device(self.project)
 
     def test_stages_only_selected_build_inputs(self):
-        for mode in ('cpu', 'cuda'):
+        for mode in ('cpu', 'gpu'):
             source = self.make_sdk(mode)
-            libraries = build_bob.CUDA_LIBRARIES if mode == 'cuda' else build_bob.CPU_LIBRARIES
+            libraries = build_bob.CUDA_LIBRARIES if mode == 'gpu' else build_bob.CPU_LIBRARIES
             with build_bob.staged_sdk(self.project, mode, self.select(mode)) as stage:
                 self.assertEqual({p.stem for p in (stage / 'lib').iterdir()}, set(libraries))
                 self.assertEqual(list(stage.rglob('*.dll')), [])
@@ -126,7 +126,7 @@ class BobBuildTests(unittest.TestCase):
             self.assertFalse(stage.exists())
             self.assertTrue((source / 'lib/torch.dll').exists())
 
-    def fingerprint(self, mode='cuda'):
+    def fingerprint(self, mode='gpu'):
         with build_bob.staged_sdk(self.project, mode, self.select(mode)) as stage:
             return (stage / 'manifest.json').read_bytes()
 
@@ -147,15 +147,15 @@ class BobBuildTests(unittest.TestCase):
     def test_cleanup_after_failure_and_concurrent_build_rejected(self):
         self.make_sdk()
         with self.assertRaisesRegex(RuntimeError, 'failed'):
-            with build_bob.staged_sdk(self.project, 'cuda', self.select()) as stage:
+            with build_bob.staged_sdk(self.project, 'gpu', self.select()) as stage:
                 with self.assertRaisesRegex(ValueError, 'already exists'):
-                    with build_bob.staged_sdk(self.project, 'cuda', self.select()):
+                    with build_bob.staged_sdk(self.project, 'gpu', self.select()):
                         self.fail('concurrent helper must fail')
                 raise RuntimeError('failed')
         self.assertFalse(stage.exists())
 
     def test_cli_uses_selected_sdk_and_preserves_bob_exit_code(self):
-        for mode in ('cpu', 'cuda'):
+        for mode in ('cpu', 'gpu'):
             self.make_sdk(mode)
             self.device.write_text(mode)
             stage = self.project / 'build-support/libtorch/local'
@@ -163,7 +163,7 @@ class BobBuildTests(unittest.TestCase):
             def bob(command, **kwargs):
                 self.assertEqual(command, ['bob.exe', 'build', 'bob.toml', '--out-dir', 'output with spaces'])
                 self.assertEqual(kwargs['cwd'], self.project)
-                self.assertEqual((stage / 'lib/torch_cuda.lib').exists(), mode == 'cuda')
+                self.assertEqual((stage / 'lib/torch_cuda.lib').exists(), mode == 'gpu')
                 return subprocess.CompletedProcess(command, 7)
 
             with patch.object(build_bob, '__file__', str(self.project / 'scripts/build_bob.py')), \
@@ -174,7 +174,7 @@ class BobBuildTests(unittest.TestCase):
             self.assertFalse(stage.exists())
 
     def test_missing_sdk_stops_before_bob(self):
-        self.device.write_text('cuda')
+        self.device.write_text('gpu')
         with patch.object(build_bob, '__file__', str(self.project / 'scripts/build_bob.py')), \
              patch.dict(os.environ, self.env, clear=True), \
              patch.object(build_bob.subprocess, 'run') as run, redirect_stderr(io.StringIO()):
@@ -184,13 +184,13 @@ class BobBuildTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which('cmake'), 'CMake needed for Docker selection')
     def test_cmake_and_helper_accept_the_same_build_selection(self):
         output = self.root / 'selection.txt'
-        for mode in ('cpu', 'cuda', 'auto', 'invalid', ''):
+        for mode in ('cpu', 'gpu', 'cuda', 'auto', 'invalid', ''):
             self.device.write_text(mode + '\n')
             output.unlink(missing_ok=True)
             result = subprocess.run(['cmake', f'-DDEVICE_FILE={self.device}', f'-DOUTPUT_FILE={output}',
                                      '-P', str(PROJECT / 'cmake/ReadDevice.cmake')],
                                     capture_output=True, text=True, timeout=15)
-            if mode in ('cpu', 'cuda'):
+            if mode in ('cpu', 'gpu'):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(output.read_text().strip(), mode)
             else:

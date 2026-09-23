@@ -11,7 +11,7 @@ hivemind = true
 loadout_file = "loadout.toml"
 # The native launcher resolves the shared LibTorch runtime before starting the bot core
 # The command RLBot will call to start your bot on Windows
-# Select cpu or cuda in device.txt before building.
+# Select cpu or gpu (default) in device.txt before building.
 run_command = "GGLBot.exe"
 # The command RLBot will call to start your bot on Linux
 run_command_linux = "./GGLBot"

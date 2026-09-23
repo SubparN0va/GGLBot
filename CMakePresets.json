@@ -16,6 +16,18 @@
       "condition": {"type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows"}
     },
     {
+      "name": "windows-gpu-release",
+      "displayName": "Windows GPU (Release)",
+      "inherits": "windows-base",
+      "cacheVariables": {"GGLBOT_DEVICE": "gpu", "CMAKE_BUILD_TYPE": "Release"}
+    },
+    {
+      "name": "windows-gpu-relwithdebinfo",
+      "displayName": "Windows GPU (RelWithDebInfo)",
+      "inherits": "windows-base",
+      "cacheVariables": {"GGLBOT_DEVICE": "gpu", "CMAKE_BUILD_TYPE": "RelWithDebInfo"}
+    },
+    {
       "name": "windows-cpu-release",
       "displayName": "Windows CPU (Release)",
       "inherits": "windows-base",
@@ -26,18 +38,6 @@
       "displayName": "Windows CPU (RelWithDebInfo)",
       "inherits": "windows-base",
       "cacheVariables": {"GGLBOT_DEVICE": "cpu", "CMAKE_BUILD_TYPE": "RelWithDebInfo"}
-    },
-    {
-      "name": "windows-cuda-release",
-      "displayName": "Windows GPU (Release)",
-      "inherits": "windows-base",
-      "cacheVariables": {"GGLBOT_DEVICE": "cuda", "CMAKE_BUILD_TYPE": "Release"}
-    },
-    {
-      "name": "windows-cuda-relwithdebinfo",
-      "displayName": "Windows GPU (RelWithDebInfo)",
-      "inherits": "windows-base",
-      "cacheVariables": {"GGLBOT_DEVICE": "cuda", "CMAKE_BUILD_TYPE": "RelWithDebInfo"}
     },
     {
       "name": "linux-cpu-release",
@@ -57,8 +57,8 @@
   "buildPresets": [
     {"name": "windows-cpu-release", "configurePreset": "windows-cpu-release"},
     {"name": "windows-cpu-relwithdebinfo", "configurePreset": "windows-cpu-relwithdebinfo"},
-    {"name": "windows-cuda-release", "configurePreset": "windows-cuda-release"},
-    {"name": "windows-cuda-relwithdebinfo", "configurePreset": "windows-cuda-relwithdebinfo"},
+    {"name": "windows-gpu-release", "configurePreset": "windows-gpu-release"},
+    {"name": "windows-gpu-relwithdebinfo", "configurePreset": "windows-gpu-relwithdebinfo"},
     {"name": "linux-cpu-release", "configurePreset": "linux-cpu-release"},
     {"name": "linux-cpu-relwithdebinfo", "configurePreset": "linux-cpu-relwithdebinfo"}
   ]

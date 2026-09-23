@@ -113,7 +113,7 @@ RUN if [ "$(cat /tmp/gglbot-device)" = cpu ]; then \
 
 RUN sed -i '/Zc:preprocessor/d' /src/cpp-interface/library/CMakeLists.txt
 RUN device="$(cat /tmp/gglbot-device)" && \
-    if [ "$device" = cuda ]; then root=LIBTORCH_CUDA_ROOT; core=GGLBotCoreCUDA; \
+    if [ "$device" = gpu ]; then root=LIBTORCH_CUDA_ROOT; core=GGLBotCoreCUDA; \
     else root=LIBTORCH_CPU_ROOT; core=GGLBotCoreCPU; fi && \
     cmake -S . -B build-win -G Ninja \
         -DCMAKE_TOOLCHAIN_FILE=/src/cmake/toolchain-msvc.cmake \
