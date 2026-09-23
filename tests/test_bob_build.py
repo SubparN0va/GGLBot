@@ -28,7 +28,7 @@ class BobBuildTests(unittest.TestCase):
         pack = Path(self.env['LOCALAPPDATA']) / 'RLBot5/bots'
         self.standard = {'cpu': pack / 'torch-archive/torch', 'gpu': pack / 'libtorch'}
 
-    def make_sdk(self, mode='gpu', root=None):
+    def make_sdk(self, mode='gpu', root=None, forwarded_version=False):
         root = root or self.standard[mode]
         headers = build_bob.CUDA_HEADERS if mode == 'gpu' else build_bob.CPU_HEADERS
         for relative in headers:
@@ -38,6 +38,12 @@ class BobBuildTests(unittest.TestCase):
         (root / build_bob.VERSION_HEADER).write_text(
             '#define TORCH_VERSION_MAJOR 2\n#define TORCH_VERSION_MINOR 14\n'
             '#define TORCH_VERSION_PATCH 0\n', encoding='utf-8')
+        if forwarded_version:
+            version_header = root / build_bob.VERSION_HEADER
+            headeronly = root / 'include/torch/headeronly/version.h'
+            headeronly.parent.mkdir(parents=True, exist_ok=True)
+            headeronly.write_bytes(version_header.read_bytes())
+            version_header.write_text('#include <torch/headeronly/version.h>\n', encoding='utf-8')
         if mode == 'gpu':
             (root / 'build-version').write_text('2.14.0+cu126\n', encoding='utf-8')
         (root / 'lib').mkdir()
@@ -64,6 +70,33 @@ class BobBuildTests(unittest.TestCase):
         self.make_sdk()
         self.assertEqual(self.select(), (self.standard['gpu'], '2.14.0+cu126'))
         self.assertFalse(self.standard['cpu'].exists())
+
+    def test_forwarded_version_header_for_both_devices(self):
+        for mode, version in [('cpu', '2.14.0+cpu'), ('gpu', '2.14.0+cu126'), ('gpu', '2.14.0+cu130')]:
+            with self.subTest(mode=mode, version=version):
+                root = self.make_sdk(mode, self.root / version, forwarded_version=True)
+                if mode == 'gpu':
+                    (root / 'build-version').write_text(version, encoding='utf-8')
+                self.assertEqual(self.select(mode, root), (root, version))
+
+    def test_forwarded_header_still_requires_version_macros(self):
+        for mode in ('cpu', 'gpu'):
+            root = self.make_sdk(mode, forwarded_version=True)
+            headeronly = root / 'include/torch/headeronly/version.h'
+            for contents in ('', '#define TORCH_VERSION_MAJOR 2\n', None):
+                with self.subTest(mode=mode, contents=contents):
+                    if contents is None:
+                        headeronly.unlink()
+                    else:
+                        headeronly.write_text(contents, encoding='utf-8')
+                    with self.assertRaisesRegex(ValueError, 'Missing LibTorch version macros'):
+                        self.select(mode, root)
+
+    def test_forwarded_cuda_version_must_match_header(self):
+        root = self.make_sdk(forwarded_version=True)
+        (root / 'build-version').write_text('2.13.0+cu130', encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'matching the LibTorch headers'):
+            self.select(explicit=root)
 
     def test_nearby_discovery_for_both_modes(self):
         for mode, subdir in [('cpu', 'torch-archive/torch'), ('gpu', 'libtorch')]:

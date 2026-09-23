@@ -50,6 +50,10 @@ def sdk_version(root: Path, mode: str) -> str:
         raise ValueError("CPU builds require CPU LibTorch, not a CUDA SDK.")
 
     header = (root / VERSION_HEADER).read_text(encoding="utf-8")
+    # Newer LibTorch forwards the public version header to its header-only API.
+    headeronly = root / "include/torch/headeronly/version.h"
+    if headeronly.is_file():
+        header += "\n" + headeronly.read_text(encoding="utf-8")
     components = []
     for component in ("MAJOR", "MINOR", "PATCH"):
         macro = re.search(r"^\s*#define\s+TORCH_VERSION_" + component + r"\s+(\d+)\b", header, re.MULTILINE)
